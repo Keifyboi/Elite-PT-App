@@ -1,0 +1,1120 @@
+'use client'
+
+import { useState, useEffect, useCallback } from 'react'
+import { getSupabaseClient } from '@/lib/supabase'
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface ClientProfile {
+  current_phase: string | null
+  week_number: number | null
+  weight_kg: number | null
+  body_fat_percent: number | null
+  training_philosophy: string | null
+  goal: string | null
+  program_start_date: string | null
+  age?: number | null
+  sex?: string | null
+}
+
+interface ClientRow {
+  id: string
+  name: string
+  email: string
+  tier: string | null
+  client_profiles: ClientProfile | ClientProfile[] | null
+}
+
+interface CheckIn {
+  id: string
+  user_id: string
+  week_number: number
+  date: string
+  weight_kg: number | null
+  body_fat_percent: number | null
+  measurements: Record<string, number> | null
+  subjective: { energy?: number; mood?: number; strength?: number; hunger?: number; stress?: number; sleep?: number } | null
+  macro_adherence: number | null
+  training_adherence: number | null
+  meals_per_day: number | null
+  hunger_rating: number | null
+  cravings_level: number | null
+  alcohol_sessions: number | null
+  meal_prep_done: boolean | null
+  hours_of_sleep: number | null
+  injury_niggle: string | null
+  stretching_done: boolean | null
+  execution_quality: number | null
+  competency_scores: { nutrition: number; training: number; recovery: number; mindset: number; consistency: number } | null
+  coach_reviewed: boolean | null
+  coach_notes: string | null
+  loom_url: string | null
+  promotion_recommended: boolean | null
+  promotion_confirmed: boolean | null
+  section_scores: { nutrition?: number; training?: number; recovery?: number; wellbeing?: number } | null
+  created_at: string
+}
+
+interface ClientFlag {
+  id: string
+  client_id: string
+  coach_id: string
+  flag_type: string
+  flag_data: Record<string, unknown> | null
+  severity: 'red' | 'amber'
+  resolved: boolean
+  created_at: string
+}
+
+interface EnrichedClient {
+  id: string
+  name: string
+  email: string
+  tier: string | null
+  profile: ClientProfile | null
+  latestCheckIn: CheckIn | null
+  recentCheckIns: CheckIn[]
+  flags: ClientFlag[]
+  daysSinceCheckIn: number | null
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function daysBetween(dateStr: string | null | undefined, now: Date): number {
+  if (!dateStr) return 9999
+  const d = new Date(dateStr)
+  return Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24))
+}
+
+function totalCompScore(scores: CheckIn['competency_scores']): number {
+  if (!scores) return 0
+  return scores.nutrition + scores.training + scores.recovery + scores.mindset + scores.consistency
+}
+
+function checkInDaysAgo(client: EnrichedClient): number | null {
+  if (!client.latestCheckIn) return null
+  return daysBetween(client.latestCheckIn.date, new Date())
+}
+
+const FLAG_LABELS: Record<string, string> = {
+  missed_checkin: 'Missed Check-In',
+  consecutive_missed_checkins: '⚠ 3 Consecutive Missed Check-Ins',
+  weight_spike: 'Weight Spike (>3kg)',
+  weight_stall: 'Weight Stalled (3+ weeks)',
+  injury_reported: '🏥 Injury Reported',
+  low_wellbeing: 'Low Well-Being Score',
+  low_compliance: 'Low Compliance',
+  promotion_ready: '✓ Promotion Recommended',
+  high_alcohol: 'High Alcohol Intake',
+  no_workouts: 'No Workouts Logged',
+}
+
+function generateAutoFlags(
+  client: EnrichedClient,
+  existingFlags: ClientFlag[]
+): Array<{ type: string; severity: 'red' | 'amber'; data?: Record<string, unknown> }> {
+  const flags: Array<{ type: string; severity: 'red' | 'amber'; data?: Record<string, unknown> }> = []
+  const now = new Date()
+  const checkIns = client.recentCheckIns
+  const latest = checkIns[0] ?? null
+
+  const alreadyFlagged = (type: string) =>
+    existingFlags.some((e) => e.flag_type === type && !e.resolved)
+
+  if (!latest) {
+    const daysSinceStart = client.profile?.program_start_date
+      ? daysBetween(client.profile.program_start_date, now)
+      : 9999
+    if (daysSinceStart > 7 && !alreadyFlagged('missed_checkin')) {
+      flags.push({ type: 'missed_checkin', severity: 'amber' })
+    }
+  } else {
+    const daysSinceLast = daysBetween(latest.date, now)
+    if (daysSinceLast > 7 && !alreadyFlagged('missed_checkin')) {
+      flags.push({ type: 'missed_checkin', severity: 'amber' })
+    }
+    if (daysSinceLast > 21 && !alreadyFlagged('consecutive_missed_checkins')) {
+      flags.push({ type: 'consecutive_missed_checkins', severity: 'red' })
+    }
+
+    if (checkIns.length >= 2) {
+      const w1 = latest.weight_kg ?? 0
+      const w2 = checkIns[1].weight_kg ?? 0
+      const change = Math.abs(w1 - w2)
+      if (change > 3 && !alreadyFlagged('weight_spike')) {
+        flags.push({ type: 'weight_spike', severity: 'amber', data: { change } })
+      }
+    }
+
+    if (checkIns.length >= 3) {
+      const w0 = checkIns[0].weight_kg ?? 0
+      const w2 = checkIns[2].weight_kg ?? 0
+      const totalChange = Math.abs(w0 - w2)
+      if (totalChange < 0.2 && !alreadyFlagged('weight_stall')) {
+        flags.push({ type: 'weight_stall', severity: 'amber' })
+      }
+    }
+
+    if (latest.injury_niggle && !alreadyFlagged('injury_reported')) {
+      flags.push({ type: 'injury_reported', severity: 'red', data: { note: latest.injury_niggle } })
+    }
+
+    const energy = latest.subjective?.energy ?? 5
+    const mood = latest.subjective?.mood ?? 5
+    if ((energy < 4 || mood < 4) && !alreadyFlagged('low_wellbeing')) {
+      flags.push({ type: 'low_wellbeing', severity: 'amber' })
+    }
+
+    if ((latest.macro_adherence ?? 100) < 50 && !alreadyFlagged('low_compliance')) {
+      flags.push({ type: 'low_compliance', severity: 'amber' })
+    }
+
+    if ((latest.alcohol_sessions ?? 0) > 4 && !alreadyFlagged('high_alcohol')) {
+      flags.push({ type: 'high_alcohol', severity: 'amber' })
+    }
+
+    // Promotion check
+    const withScores = checkIns.filter((c) => c.competency_scores).slice(0, 3)
+    if (withScores.length >= 2) {
+      const totalSum = withScores.reduce((s, c) => s + totalCompScore(c.competency_scores), 0)
+      const avg = totalSum / withScores.length
+      if (avg >= 20 && !alreadyFlagged('promotion_ready')) {
+        flags.push({ type: 'promotion_ready', severity: 'amber', data: { score: avg } })
+      }
+    }
+  }
+
+  return flags
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function Badge({ children, variant = 'default' }: { children: React.ReactNode; variant?: 'default' | 'accent' }) {
+  if (variant === 'accent') {
+    return (
+      <span style={{
+        fontSize: 9,
+        padding: '2px 6px',
+        background: 'var(--accent-glow)',
+        border: '1px solid var(--accent)',
+        color: 'var(--accent)',
+        letterSpacing: '0.06em',
+        fontFamily: 'inherit',
+        textTransform: 'uppercase',
+      }}>
+        {children}
+      </span>
+    )
+  }
+  return (
+    <span style={{
+      fontSize: 9,
+      padding: '2px 6px',
+      background: 'var(--surface)',
+      border: '1px solid var(--card-border)',
+      color: 'var(--muted)',
+      letterSpacing: '0.06em',
+      textTransform: 'uppercase',
+    }}>
+      {children}
+    </span>
+  )
+}
+
+function StatCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{
+      background: 'var(--surface)',
+      border: '1px solid var(--card-border)',
+      padding: '12px 14px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 4,
+    }}>
+      <div style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>{label}</div>
+      <div style={{
+        fontFamily: "'Bebas Neue', impact, sans-serif",
+        fontSize: 22,
+        letterSpacing: '0.06em',
+        color: 'var(--foreground)',
+        lineHeight: 1,
+      }}>{value}</div>
+    </div>
+  )
+}
+
+function ProgressBar({ value, max = 100 }: { value: number; max?: number }) {
+  const pct = Math.min(100, Math.max(0, (value / max) * 100))
+  const color = value >= 80 ? 'var(--success)' : value >= 60 ? 'var(--accent)' : 'var(--danger)'
+  return (
+    <div style={{ height: 6, background: 'var(--card-border)', width: '100%' }}>
+      <div style={{ height: '100%', width: `${pct}%`, background: color, transition: 'width 0.3s' }} />
+    </div>
+  )
+}
+
+function MiniBar({ value, max = 5 }: { value: number; max?: number }) {
+  const pct = (value / max) * 100
+  const color = pct >= 80 ? 'var(--success)' : pct >= 60 ? 'var(--accent)' : 'var(--danger)'
+  return (
+    <div style={{ height: 4, background: 'var(--card-border)', width: 60, display: 'inline-block' }}>
+      <div style={{ height: '100%', width: `${pct}%`, background: color }} />
+    </div>
+  )
+}
+
+function CheckInDaysBadge({ days }: { days: number | null }) {
+  if (days === null) return <span style={{ fontSize: 10, color: 'var(--danger)' }}>NO CHECK-INS</span>
+  const color = days < 3 ? 'var(--success)' : days <= 7 ? 'var(--accent)' : 'var(--danger)'
+  return (
+    <span style={{ fontSize: 10, color }}>
+      {days === 0 ? 'Today' : `${days}d ago`}
+    </span>
+  )
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
+export default function CoachPortal() {
+  const [coachId, setCoachId] = useState<string | null>(null)
+  const [coachName, setCoachName] = useState<string>('')
+  const [clients, setClients] = useState<EnrichedClient[]>([])
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // Coach review state for selected client
+  const [reviewDraft, setReviewDraft] = useState<{
+    loomUrl: string
+    notes: string
+    promotionRecommended: boolean
+    coachReviewed: boolean
+  }>({ loomUrl: '', notes: '', promotionRecommended: false, coachReviewed: false })
+  const [saving, setSaving] = useState(false)
+  const [saveMsg, setSaveMsg] = useState<string | null>(null)
+
+  const supabase = getSupabaseClient()
+
+  // ── Auth & load ──
+  useEffect(() => {
+    async function init() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        setError('Not authenticated. Sign in as a coach to access this portal.')
+        setLoading(false)
+        return
+      }
+
+      // Get coach profile
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id, name, role')
+        .eq('id', user.id)
+        .single()
+
+      if (!profile || profile.role !== 'coach') {
+        setError('This portal is for coaches only.')
+        setLoading(false)
+        return
+      }
+
+      setCoachId(profile.id)
+      setCoachName(profile.name ?? 'Coach')
+      await loadClients(profile.id)
+      setLoading(false)
+    }
+    init()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const loadClients = useCallback(async (cId: string) => {
+    const now = new Date()
+
+    // 1. Fetch clients
+    const { data: rawClients, error: cErr } = await supabase
+      .from('profiles')
+      .select(`
+        id, name, email, tier,
+        client_profiles (
+          current_phase, week_number, weight_kg, body_fat_percent,
+          training_philosophy, goal, program_start_date, age, sex
+        )
+      `)
+      .eq('coach_id', cId)
+
+    if (cErr || !rawClients) return
+
+    // 2. Fetch unresolved flags for all clients
+    const { data: allFlags } = await supabase
+      .from('client_flags')
+      .select('*')
+      .eq('coach_id', cId)
+      .eq('resolved', false)
+      .order('created_at', { ascending: false })
+
+    const flagsByClient: Record<string, ClientFlag[]> = {}
+    for (const f of allFlags ?? []) {
+      if (!flagsByClient[f.client_id]) flagsByClient[f.client_id] = []
+      flagsByClient[f.client_id].push(f)
+    }
+
+    // 3. Fetch last 3 check-ins per client in parallel
+    const enriched: EnrichedClient[] = await Promise.all(
+      (rawClients as ClientRow[]).map(async (c) => {
+        const profile = Array.isArray(c.client_profiles)
+          ? (c.client_profiles[0] ?? null)
+          : (c.client_profiles ?? null)
+
+        const { data: checkIns } = await supabase
+          .from('check_ins')
+          .select('*')
+          .eq('user_id', c.id)
+          .order('week_number', { ascending: false })
+          .limit(3)
+
+        const recentCheckIns: CheckIn[] = checkIns ?? []
+        const latestCheckIn = recentCheckIns[0] ?? null
+        const existingFlags = flagsByClient[c.id] ?? []
+
+        const client: EnrichedClient = {
+          id: c.id,
+          name: c.name,
+          email: c.email,
+          tier: c.tier,
+          profile,
+          latestCheckIn,
+          recentCheckIns,
+          flags: existingFlags,
+          daysSinceCheckIn: latestCheckIn ? daysBetween(latestCheckIn.date, now) : null,
+        }
+
+        // 4. Auto-generate flags
+        const newFlags = generateAutoFlags(client, existingFlags)
+        if (newFlags.length > 0) {
+          const inserts = newFlags.map((f) => ({
+            client_id: c.id,
+            coach_id: cId,
+            flag_type: f.type,
+            flag_data: f.data ?? null,
+            severity: f.severity,
+            resolved: false,
+          }))
+          const { data: inserted } = await supabase
+            .from('client_flags')
+            .insert(inserts)
+            .select()
+          if (inserted) {
+            client.flags = [...existingFlags, ...inserted]
+          }
+        }
+
+        return client
+      })
+    )
+
+    setClients(enriched)
+  }, [supabase])
+
+  // ── When client selected, populate review draft ──
+  const selectedClient = clients.find((c) => c.id === selectedId) ?? null
+
+  useEffect(() => {
+    if (!selectedClient?.latestCheckIn) return
+    const ci = selectedClient.latestCheckIn
+    setReviewDraft({
+      loomUrl: ci.loom_url ?? '',
+      notes: ci.coach_notes ?? '',
+      promotionRecommended: ci.promotion_recommended ?? false,
+      coachReviewed: ci.coach_reviewed ?? false,
+    })
+    setSaveMsg(null)
+  }, [selectedId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleSaveReview() {
+    if (!selectedClient?.latestCheckIn) return
+    setSaving(true)
+    setSaveMsg(null)
+    const { error: err } = await supabase
+      .from('check_ins')
+      .update({
+        loom_url: reviewDraft.loomUrl || null,
+        coach_notes: reviewDraft.notes || null,
+        promotion_recommended: reviewDraft.promotionRecommended,
+        coach_reviewed: reviewDraft.coachReviewed,
+      })
+      .eq('id', selectedClient.latestCheckIn.id)
+
+    setSaving(false)
+    setSaveMsg(err ? 'Save failed.' : 'Saved.')
+    setTimeout(() => setSaveMsg(null), 3000)
+  }
+
+  async function handleResolveFlag(flagId: string) {
+    await supabase.from('client_flags').update({ resolved: true }).eq('id', flagId)
+    setClients((prev) =>
+      prev.map((c) => ({
+        ...c,
+        flags: c.flags.map((f) => (f.id === flagId ? { ...f, resolved: true } : f)),
+      }))
+    )
+  }
+
+  async function handleSignOut() {
+    await supabase.auth.signOut()
+    window.location.href = '/'
+  }
+
+  // ── Trend arrow ──
+  function trendArrow(current: number | null, prev: number | null, lowerIsBetter = false): string {
+    if (current == null || prev == null) return '—'
+    if (current === prev) return '→'
+    const up = current > prev
+    if (lowerIsBetter) return up ? '↑' : '↓'
+    return up ? '↑' : '↓'
+  }
+
+  function trendColor(current: number | null, prev: number | null, lowerIsBetter = false): string {
+    if (current == null || prev == null) return 'var(--muted)'
+    if (current === prev) return 'var(--muted)'
+    const up = current > prev
+    const good = lowerIsBetter ? !up : up
+    return good ? 'var(--success)' : 'var(--danger)'
+  }
+
+  // ─── Render ─────────────────────────────────────────────────────────────────
+
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', fontSize: 13 }}>
+        Loading coach portal…
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, padding: 24, textAlign: 'center' }}>
+        <div style={{ fontFamily: "'Bebas Neue', impact, sans-serif", fontSize: 28, letterSpacing: '0.06em', color: 'var(--foreground)' }}>ACCESS DENIED</div>
+        <div style={{ color: 'var(--muted)', fontSize: 13, maxWidth: 320 }}>{error}</div>
+        <a
+          href="/"
+          style={{
+            display: 'inline-block',
+            marginTop: 8,
+            padding: '10px 28px',
+            background: 'var(--accent)',
+            color: '#000',
+            fontFamily: "'Bebas Neue', impact, sans-serif",
+            fontSize: 14,
+            letterSpacing: '0.1em',
+            textDecoration: 'none',
+          }}
+        >
+          SIGN IN
+        </a>
+      </div>
+    )
+  }
+
+  const unresolvedFlags = (id: string) => clients.find((c) => c.id === id)?.flags.filter((f) => !f.resolved) ?? []
+
+  return (
+    <div style={{ minHeight: '100vh', background: 'var(--background)', fontFamily: 'var(--font-body), Lekton, monospace' }}>
+
+      {/* ── Header ── */}
+      <header style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 100,
+        background: 'var(--card)',
+        borderBottom: '1px solid var(--accent)',
+        padding: '0 20px',
+        height: 52,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <a href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 12H5M12 5l-7 7 7 7"/>
+            </svg>
+          </a>
+          <span style={{ fontFamily: "'Bebas Neue', impact, sans-serif", fontSize: 20, letterSpacing: '0.06em', color: 'var(--foreground)' }}>
+            ATHLETIC ODYSSEY
+          </span>
+          <span style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: '0.08em' }}>COACH PORTAL</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <span style={{ fontSize: 11, color: 'var(--muted-bright)', letterSpacing: '0.04em' }}>{coachName}</span>
+          <button
+            onClick={handleSignOut}
+            style={{
+              fontSize: 10,
+              color: 'var(--muted)',
+              background: 'none',
+              border: '1px solid var(--card-border)',
+              padding: '4px 10px',
+              cursor: 'pointer',
+              letterSpacing: '0.06em',
+            }}
+          >
+            SIGN OUT
+          </button>
+        </div>
+      </header>
+
+      {/* ── Body ── */}
+      <div style={{ paddingTop: 52, display: 'flex', height: 'calc(100vh - 52px)' }}>
+
+        {/* ── Sidebar ── */}
+        <aside style={{
+          width: 280,
+          flexShrink: 0,
+          borderRight: '1px solid var(--card-border)',
+          overflowY: 'auto',
+          background: 'var(--surface)',
+          display: 'flex',
+          flexDirection: 'column',
+        }}>
+          <div style={{ padding: '12px 16px 8px', borderBottom: '1px solid var(--card-border)' }}>
+            <span style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: '0.08em' }}>
+              {clients.length} CLIENT{clients.length !== 1 ? 'S' : ''}
+            </span>
+          </div>
+
+          {clients.length === 0 ? (
+            <div style={{ padding: 20, color: 'var(--muted)', fontSize: 12 }}>No clients assigned yet.</div>
+          ) : (
+            clients.map((client) => {
+              const days = checkInDaysAgo(client)
+              const flags = unresolvedFlags(client.id)
+              const isActive = client.id === selectedId
+              return (
+                <div
+                  key={client.id}
+                  onClick={() => setSelectedId(client.id)}
+                  style={{
+                    padding: '12px 16px',
+                    cursor: 'pointer',
+                    borderLeft: isActive ? '2px solid var(--accent)' : '2px solid transparent',
+                    background: isActive ? 'var(--accent-glow)' : 'transparent',
+                    borderBottom: '1px solid var(--card-border)',
+                    position: 'relative',
+                  }}
+                >
+                  <div style={{
+                    fontFamily: "'Bebas Neue', impact, sans-serif",
+                    fontSize: 14,
+                    letterSpacing: '0.06em',
+                    color: 'var(--foreground)',
+                    marginBottom: 4,
+                  }}>
+                    {client.name}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 4, flexWrap: 'wrap' }}>
+                    {client.tier && <Badge>{client.tier}</Badge>}
+                    {client.profile?.current_phase && <Badge variant="accent">{client.profile.current_phase}</Badge>}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ fontSize: 10, color: 'var(--muted)' }}>
+                      Check-in: <CheckInDaysBadge days={days} />
+                    </div>
+                    {flags.length > 0 && (
+                      <div style={{
+                        background: 'var(--danger)',
+                        color: '#fff',
+                        borderRadius: '50%',
+                        width: 18,
+                        height: 18,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 10,
+                        fontWeight: 700,
+                        flexShrink: 0,
+                      }}>
+                        {flags.length}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })
+          )}
+        </aside>
+
+        {/* ── Main detail ── */}
+        <main style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
+          {!selectedClient ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 12 }}>
+              {clients.length === 0 ? (
+                <>
+                  <div style={{ fontFamily: "'Bebas Neue', impact, sans-serif", fontSize: 32, letterSpacing: '0.06em' }}>COACH PORTAL</div>
+                  <div style={{ color: 'var(--muted)', fontSize: 13 }}>No clients assigned yet.</div>
+                  <div style={{ color: 'var(--muted)', fontSize: 12, maxWidth: 340, textAlign: 'center' }}>
+                    Clients will appear here once they sign up and are linked to your account.
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontFamily: "'Bebas Neue', impact, sans-serif", fontSize: 24, letterSpacing: '0.06em', color: 'var(--muted)' }}>
+                    SELECT A CLIENT
+                  </div>
+                  <div style={{ color: 'var(--muted)', fontSize: 12 }}>Choose a client from the left sidebar.</div>
+                </>
+              )}
+            </div>
+          ) : (
+            <ClientDetail
+              client={selectedClient}
+              reviewDraft={reviewDraft}
+              setReviewDraft={setReviewDraft}
+              saving={saving}
+              saveMsg={saveMsg}
+              onSave={handleSaveReview}
+              onResolveFlag={handleResolveFlag}
+              trendArrow={trendArrow}
+              trendColor={trendColor}
+            />
+          )}
+        </main>
+      </div>
+
+      {/* ── Mobile: stack sidebar above main ── */}
+      <style>{`
+        @media (max-width: 768px) {
+          div[style*="display: flex; height"] {
+            flex-direction: column !important;
+          }
+          aside {
+            width: 100% !important;
+            height: 200px !important;
+            border-right: none !important;
+            border-bottom: 1px solid var(--card-border) !important;
+          }
+        }
+      `}</style>
+    </div>
+  )
+}
+
+// ─── Client Detail Panel ──────────────────────────────────────────────────────
+
+function ClientDetail({
+  client,
+  reviewDraft,
+  setReviewDraft,
+  saving,
+  saveMsg,
+  onSave,
+  onResolveFlag,
+  trendArrow,
+  trendColor,
+}: {
+  client: EnrichedClient
+  reviewDraft: { loomUrl: string; notes: string; promotionRecommended: boolean; coachReviewed: boolean }
+  setReviewDraft: React.Dispatch<React.SetStateAction<{ loomUrl: string; notes: string; promotionRecommended: boolean; coachReviewed: boolean }>>
+  saving: boolean
+  saveMsg: string | null
+  onSave: () => void
+  onResolveFlag: (id: string) => void
+  trendArrow: (a: number | null, b: number | null, lbg?: boolean) => string
+  trendColor: (a: number | null, b: number | null, lbg?: boolean) => string
+}) {
+  const p = client.profile
+  const ci = client.latestCheckIn
+  const checkIns = client.recentCheckIns
+  const flags = client.flags.filter((f) => !f.resolved)
+  const compTotal = ci ? totalCompScore(ci.competency_scores) : 0
+  const days = client.daysSinceCheckIn
+
+  const sectionScoreColor = (v: number) => v >= 80 ? 'var(--success)' : v >= 60 ? 'var(--accent)' : 'var(--danger)'
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 860 }}>
+
+      {/* ── Section 1: Header card ── */}
+      <div style={{
+        background: 'var(--card)',
+        border: '1px solid var(--card-border)',
+        borderTop: '2px solid var(--accent)',
+        padding: '18px 20px',
+      }}>
+        <div style={{ fontFamily: "'Bebas Neue', impact, sans-serif", fontSize: 28, letterSpacing: '0.06em', marginBottom: 6 }}>
+          {client.name}
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+          {client.tier && <Badge>{client.tier}</Badge>}
+          {p?.current_phase && <Badge variant="accent">{p.current_phase}</Badge>}
+          {p?.week_number != null && <Badge>Week {p.week_number}</Badge>}
+          {p?.training_philosophy && <Badge>{p.training_philosophy}</Badge>}
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--muted)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          {p?.goal && <span>Goal: <span style={{ color: 'var(--foreground)' }}>{p.goal}</span></span>}
+          {p?.sex && <span>Sex: <span style={{ color: 'var(--foreground)' }}>{p.sex}</span></span>}
+          {p?.program_start_date && <span>Starting: <span style={{ color: 'var(--foreground)' }}>{p.program_start_date}</span></span>}
+          <span>Email: <span style={{ color: 'var(--foreground)' }}>{client.email}</span></span>
+        </div>
+      </div>
+
+      {/* ── Section 2: Snapshot stats ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+        <StatCard label="Current Weight" value={ci?.weight_kg != null ? `${ci.weight_kg} kg` : p?.weight_kg != null ? `${p.weight_kg} kg` : '—'} />
+        <StatCard label="Body Fat" value={ci?.body_fat_percent != null ? `${ci.body_fat_percent}%` : p?.body_fat_percent != null ? `${p.body_fat_percent}%` : '—'} />
+        <StatCard label="Competency" value={ci?.competency_scores ? `${compTotal}/25` : '—'} />
+        <StatCard label="Last Check-In" value={days != null ? (days === 0 ? 'Today' : `${days}d ago`) : 'None'} />
+      </div>
+
+      {/* ── Section 3: Active flags ── */}
+      {flags.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 2 }}>
+            Active Flags ({flags.length})
+          </div>
+          {flags.map((flag) => {
+            const isRed = flag.severity === 'red'
+            return (
+              <div
+                key={flag.id}
+                style={{
+                  background: isRed ? 'var(--danger-glow)' : 'var(--accent-glow)',
+                  border: `1px solid ${isRed ? 'var(--danger)' : 'var(--accent)'}`,
+                  padding: '10px 14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                }}
+              >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <div style={{ fontSize: 12, color: isRed ? 'var(--danger)' : 'var(--accent)', letterSpacing: '0.04em' }}>
+                    {isRed ? '🔴' : '🟡'} {FLAG_LABELS[flag.flag_type] ?? flag.flag_type}
+                  </div>
+                  {flag.flag_data && (
+                    <div style={{ fontSize: 10, color: 'var(--muted)' }}>
+                      {Object.entries(flag.flag_data).map(([k, v]) => `${k}: ${String(v)}`).join(' · ')}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 10, color: 'var(--muted)' }}>
+                    {new Date(flag.created_at).toLocaleDateString('en-AU')}
+                  </div>
+                </div>
+                <button
+                  onClick={() => onResolveFlag(flag.id)}
+                  style={{
+                    fontSize: 10,
+                    padding: '4px 10px',
+                    background: 'var(--card)',
+                    border: `1px solid ${isRed ? 'var(--danger)' : 'var(--accent)'}`,
+                    color: isRed ? 'var(--danger)' : 'var(--accent)',
+                    cursor: 'pointer',
+                    letterSpacing: '0.06em',
+                    flexShrink: 0,
+                  }}
+                >
+                  RESOLVE
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* ── Section 4: Latest check-in ── */}
+      {ci ? (
+        <div style={{
+          background: 'var(--card)',
+          border: '1px solid var(--card-border)',
+          padding: '18px 20px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 18,
+        }}>
+          <div style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: '0.08em' }}>
+            LATEST CHECK-IN — WEEK {ci.week_number} · {ci.date}
+          </div>
+
+          {/* Row 1: Section scores */}
+          {ci.section_scores && (
+            <div>
+              <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 8, letterSpacing: '0.06em' }}>SECTION SCORES</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+                {(['nutrition', 'training', 'recovery', 'wellbeing'] as const).map((k) => {
+                  const val = ci.section_scores?.[k] ?? 0
+                  return (
+                    <div key={k} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <div style={{ fontSize: 9, color: 'var(--muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>{k}</div>
+                      <ProgressBar value={val} />
+                      <div style={{ fontSize: 11, color: sectionScoreColor(val) }}>{val}/100</div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Row 2: Key metrics */}
+          <div>
+            <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 8, letterSpacing: '0.06em' }}>KEY METRICS</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '4px 24px', fontSize: 12 }}>
+              {[
+                ['Weight', ci.weight_kg != null ? `${ci.weight_kg}kg` : '—'],
+                ['BF%', ci.body_fat_percent != null ? `${ci.body_fat_percent}%` : '—'],
+                ['Sleep', ci.hours_of_sleep != null ? `${ci.hours_of_sleep}hrs` : '—'],
+                ['Execution', ci.execution_quality != null ? `${ci.execution_quality}/5` : '—'],
+                ['Hunger', ci.hunger_rating != null ? `${ci.hunger_rating}/5` : '—'],
+                ['Cravings', ci.cravings_level != null ? `${ci.cravings_level}/5` : '—'],
+                ['Alcohol', ci.alcohol_sessions != null ? `${ci.alcohol_sessions} sessions` : '—'],
+                ['Macro Compliance', ci.macro_adherence != null ? `${ci.macro_adherence}%` : '—'],
+              ].map(([label, val]) => (
+                <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid var(--surface)' }}>
+                  <span style={{ color: 'var(--muted)', fontSize: 11 }}>{label}</span>
+                  <span style={{ color: 'var(--foreground)', fontSize: 11 }}>{val}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Row 3: Competency scores */}
+          {ci.competency_scores && (
+            <div>
+              <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 8, letterSpacing: '0.06em' }}>COMPETENCY SCORES</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {(['nutrition', 'training', 'recovery', 'mindset', 'consistency'] as const).map((k) => {
+                  const val = ci.competency_scores![k]
+                  return (
+                    <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ width: 90, fontSize: 10, color: 'var(--muted)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>{k}</div>
+                      <MiniBar value={val} max={5} />
+                      <div style={{ fontSize: 11 }}>{val}/5</div>
+                    </div>
+                  )
+                })}
+                <div style={{
+                  fontSize: 12,
+                  color: compTotal >= 20 ? 'var(--accent)' : 'var(--muted)',
+                  marginTop: 4,
+                  letterSpacing: '0.04em',
+                }}>
+                  TOTAL: {compTotal}/25
+                  {compTotal >= 20 && (
+                    <span style={{ marginLeft: 10, color: 'var(--accent)', fontFamily: "'Bebas Neue', impact, sans-serif", letterSpacing: '0.06em', fontSize: 13 }}>
+                      PHASE ADVANCE ELIGIBLE
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Row 4: Injury */}
+          {ci.injury_niggle && (
+            <div style={{
+              background: 'var(--danger-glow)',
+              border: '1px solid var(--danger)',
+              padding: '10px 14px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+            }}>
+              <div style={{ fontSize: 12, color: 'var(--danger)' }}>⚠ INJURY: {ci.injury_niggle}</div>
+              <span style={{ fontSize: 10, color: 'var(--danger)', letterSpacing: '0.06em', flexShrink: 0 }}>
+                FLAG FOR REVIEW
+              </span>
+            </div>
+          )}
+
+          {/* Row 5: Coach review */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: '0.08em' }}>COACH REVIEW</div>
+
+            {/* Reviewed toggle */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 12 }}>
+              <input
+                type="checkbox"
+                checked={reviewDraft.coachReviewed}
+                onChange={(e) => setReviewDraft((d) => ({ ...d, coachReviewed: e.target.checked }))}
+                style={{ accentColor: 'var(--accent)', width: 14, height: 14 }}
+              />
+              <span>Coach Reviewed</span>
+              {ci.coach_reviewed && (
+                <span style={{ fontSize: 10, color: 'var(--success)' }}>
+                  ✓ Reviewed
+                </span>
+              )}
+            </label>
+
+            {/* Loom URL */}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                type="text"
+                value={reviewDraft.loomUrl}
+                onChange={(e) => setReviewDraft((d) => ({ ...d, loomUrl: e.target.value }))}
+                placeholder="Loom URL..."
+                style={{
+                  flex: 1,
+                  fontSize: 12,
+                  padding: '8px 10px',
+                  background: 'var(--surface)',
+                  border: '1px solid var(--card-border)',
+                  color: 'var(--foreground)',
+                  fontFamily: 'inherit',
+                }}
+              />
+            </div>
+
+            {/* Notes */}
+            <textarea
+              value={reviewDraft.notes}
+              onChange={(e) => setReviewDraft((d) => ({ ...d, notes: e.target.value }))}
+              placeholder="Coach notes..."
+              rows={3}
+              style={{
+                fontSize: 12,
+                padding: '8px 10px',
+                background: 'var(--surface)',
+                border: '1px solid var(--card-border)',
+                color: 'var(--foreground)',
+                fontFamily: 'inherit',
+                resize: 'vertical',
+              }}
+            />
+
+            {/* Promotion */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 12 }}>
+              <input
+                type="checkbox"
+                checked={reviewDraft.promotionRecommended}
+                onChange={(e) => setReviewDraft((d) => ({ ...d, promotionRecommended: e.target.checked }))}
+                style={{ accentColor: 'var(--accent)', width: 14, height: 14 }}
+              />
+              <span>Promotion Recommended</span>
+            </label>
+
+            {/* Save */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <button
+                onClick={onSave}
+                disabled={saving}
+                style={{
+                  fontSize: 11,
+                  padding: '8px 18px',
+                  background: 'var(--accent)',
+                  border: 'none',
+                  color: '#fff',
+                  cursor: saving ? 'not-allowed' : 'pointer',
+                  letterSpacing: '0.06em',
+                  opacity: saving ? 0.7 : 1,
+                  fontFamily: "'Bebas Neue', impact, sans-serif",
+                }}
+              >
+                {saving ? 'SAVING…' : 'SAVE'}
+              </button>
+              {saveMsg && (
+                <span style={{ fontSize: 11, color: saveMsg === 'Saved.' ? 'var(--success)' : 'var(--danger)' }}>
+                  {saveMsg}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div style={{
+          background: 'var(--surface)',
+          border: '1px solid var(--card-border)',
+          padding: '24px 20px',
+          fontSize: 12,
+          color: 'var(--muted)',
+        }}>
+          No check-ins submitted yet.
+        </div>
+      )}
+
+      {/* ── Section 5: 3-week trend ── */}
+      {checkIns.length > 0 && (
+        <div style={{
+          background: 'var(--card)',
+          border: '1px solid var(--card-border)',
+          padding: '18px 20px',
+        }}>
+          <div style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: '0.08em', marginBottom: 12 }}>3-WEEK TREND</div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+              <thead>
+                <tr>
+                  {['WEEK', 'WEIGHT', 'BF%', 'COMP SCORE', 'COMPLIANCE', 'NUTRITION'].map((h) => (
+                    <th key={h} style={{
+                      textAlign: 'left',
+                      padding: '4px 8px',
+                      fontSize: 9,
+                      color: 'var(--muted)',
+                      letterSpacing: '0.08em',
+                      borderBottom: '1px solid var(--card-border)',
+                      fontWeight: 400,
+                    }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {checkIns.map((c, i) => {
+                  const prev = checkIns[i + 1] ?? null
+                  const goal = client.profile?.goal
+                  const weightLowerIsBetter = goal === 'cut' || goal === 'contest-prep'
+                  return (
+                    <tr key={c.id} style={{ borderBottom: '1px solid var(--surface)' }}>
+                      <td style={{ padding: '6px 8px', color: 'var(--muted)' }}>Wk {c.week_number}</td>
+                      <td style={{ padding: '6px 8px' }}>
+                        {c.weight_kg != null ? `${c.weight_kg}kg` : '—'}
+                        {prev && (
+                          <span style={{ marginLeft: 4, fontSize: 10, color: trendColor(c.weight_kg, prev.weight_kg, weightLowerIsBetter) }}>
+                            {trendArrow(c.weight_kg, prev.weight_kg, weightLowerIsBetter)}
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: '6px 8px' }}>
+                        {c.body_fat_percent != null ? `${c.body_fat_percent}%` : '—'}
+                        {prev && (
+                          <span style={{ marginLeft: 4, fontSize: 10, color: trendColor(c.body_fat_percent, prev.body_fat_percent, true) }}>
+                            {trendArrow(c.body_fat_percent, prev.body_fat_percent, true)}
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: '6px 8px' }}>
+                        {c.competency_scores ? `${totalCompScore(c.competency_scores)}/25` : '—'}
+                        {prev?.competency_scores && c.competency_scores && (
+                          <span style={{ marginLeft: 4, fontSize: 10, color: trendColor(totalCompScore(c.competency_scores), totalCompScore(prev.competency_scores)) }}>
+                            {trendArrow(totalCompScore(c.competency_scores), totalCompScore(prev.competency_scores))}
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: '6px 8px' }}>
+                        {c.macro_adherence != null ? `${c.macro_adherence}%` : '—'}
+                        {prev && (
+                          <span style={{ marginLeft: 4, fontSize: 10, color: trendColor(c.macro_adherence, prev.macro_adherence) }}>
+                            {trendArrow(c.macro_adherence, prev.macro_adherence)}
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: '6px 8px' }}>
+                        {c.section_scores?.nutrition != null ? `${c.section_scores.nutrition}/100` : '—'}
+                        {prev?.section_scores?.nutrition != null && c.section_scores?.nutrition != null && (
+                          <span style={{ marginLeft: 4, fontSize: 10, color: trendColor(c.section_scores.nutrition, prev.section_scores.nutrition) }}>
+                            {trendArrow(c.section_scores.nutrition, prev.section_scores.nutrition)}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
