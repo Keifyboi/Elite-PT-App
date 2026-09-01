@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react'
 import type { MacroTargets, MealPlan, Meal, MealFood, FoodItem, UserProfile, CarbCycleDay } from '@/lib/types'
 import { getProfile, saveProfile, getTodayMealPlan, saveMealPlan, getMealPlanByDate, getWeekDates, clearWeekMealPlans } from '@/lib/storage'
-import { calculateMacros, recommendedSteps, generateCarbCycle, getCarbCyclePatterns, prescribeCarbCycle, prescribeTrainingDays, prescribeNutritionDayTypes, peakWeekMacros, contestPrepTimeline, bmrMuller, calculateLBM, calculateFatMass, calculateTDEE, determineActivityFactor, proteinTarget, type CarbCyclePattern } from '@/lib/nutrition-engine'
+import { calculateMacros, recommendedSteps, generateCarbCycle, getCarbCyclePatterns, prescribeCarbCycle, prescribeTrainingDays, prescribeNutritionDayTypes, getDivisionTargetBodyFat, contestPrepTimeline, bmrMuller, calculateLBM, calculateFatMass, calculateTDEE, determineActivityFactor, proteinTarget, type CarbCyclePattern } from '@/lib/nutrition-engine'
 import { generateMealPlan, swapFood, getSwapCandidates, adjustPortion, rebalancePlan } from '@/lib/meal-generator'
+import { buildPeakWeekProtocol } from '@/lib/peak-week'
 import { FOOD_DATABASE } from '@/lib/data/foods'
 import ShoppingListView from './ShoppingList'
 import BarcodeScanner, { type ScannedFood } from './BarcodeScanner'
@@ -162,6 +163,7 @@ export default function NutritionTracker() {
   const [isTrainingDay, setIsTrainingDay] = useState(true)
   const [portionEdit, setPortionEdit] = useState<{ mealId: string; foodIndex: number; value: string } | null>(null)
   const [carbCyclePattern, setCarbCyclePattern] = useState<CarbCyclePattern>('none')
+  const [peakWeekPdfLoading, setPeakWeekPdfLoading] = useState(false)
   const [weekCycle, setWeekCycle] = useState<CarbCycleDay[]>([])
   const [selectedDay, setSelectedDay] = useState(0)
   const [showCyclePanel, setShowCyclePanel] = useState(false)
@@ -591,7 +593,7 @@ export default function NutritionTracker() {
         const mode = getNutritionMode(profile.currentPhase, profile.trainingPhilosophy, profile.goal)
         if (mode !== 'contest') return null
 
-        const contestDate = (profile as unknown as Record<string, unknown>).contestDate as string | undefined
+        const contestDate = profile.contestDate
         const dayTargets = getDayMacros()
 
         if (!contestDate) {
@@ -607,8 +609,10 @@ export default function NutritionTracker() {
         const weeksOut = Math.max(0, Math.ceil(msOut / (7 * 24 * 60 * 60 * 1000)))
         const daysOut = Math.max(0, Math.ceil(msOut / (24 * 60 * 60 * 1000)))
 
-        const peakMacros = peakWeekMacros(dayTargets, Math.min(daysOut, 10), 'bodybuilding')
-        const timeline = contestPrepTimeline(profile.weightKg, profile.bodyFatPercent, 4, 0.6)
+        const targetBf = profile.division ? getDivisionTargetBodyFat(profile.division) : 4
+        const protocol = buildPeakWeekProtocol(profile, dayTargets)
+        const currentDay = protocol.find(d => d.daysOut === Math.min(daysOut, 10)) ?? protocol[protocol.length - 1]
+        const timeline = contestPrepTimeline(profile.weightKg, profile.bodyFatPercent, targetBf, 0.6)
         const phaseLabel = getPrepPhaseLabel(weeksOut)
         const nextMilestone = getNextMilestone(weeksOut)
 
@@ -623,13 +627,15 @@ export default function NutritionTracker() {
               <p className="text-[10px] text-[var(--muted)] mt-0.5">{nextMilestone}</p>
             </div>
             <div>
-              <p className="text-[10px] text-[var(--muted)] tracking-widest uppercase mb-2">Peak Week Targets</p>
+              <div className="flex justify-between items-center mb-2">
+                <p className="text-[10px] text-[var(--muted)] tracking-widest uppercase">Peak Week Targets — {currentDay.label}</p>
+              </div>
               <div className="grid grid-cols-4 gap-2">
                 {([
-                  { label: 'KCAL', value: peakMacros.calories },
-                  { label: 'PROTEIN', value: `${peakMacros.protein}g` },
-                  { label: 'CARBS', value: `${peakMacros.carbs}g` },
-                  { label: 'FATS', value: `${peakMacros.fats}g` },
+                  { label: 'KCAL', value: currentDay.targets.calories },
+                  { label: 'PROTEIN', value: `${currentDay.targets.protein}g` },
+                  { label: 'CARBS', value: `${currentDay.targets.carbs}g` },
+                  { label: 'FATS', value: `${currentDay.targets.fats}g` },
                 ] as { label: string; value: string | number }[]).map(({ label, value }) => (
                   <div key={label} className="bg-[var(--surface)] border border-[var(--card-border)] p-2 text-center">
                     <p className="text-[8px] text-[var(--muted)] tracking-widest">{label}</p>
@@ -643,6 +649,29 @@ export default function NutritionTracker() {
                 Est. prep duration: <span style={{ color: 'var(--foreground)' }}>{timeline.weeksRequired} weeks</span> · Weekly loss: <span style={{ color: 'var(--foreground)' }}>{timeline.weeklyLossKg}kg</span> · Daily deficit: <span style={{ color: 'var(--danger)' }}>-{timeline.dailyDeficit} kcal</span>
               </p>
             </div>
+            <button
+              onClick={async () => {
+                setPeakWeekPdfLoading(true)
+                try {
+                  const { pdf } = await import('@react-pdf/renderer')
+                  const { PeakWeekPDF } = await import('./PeakWeekPDF')
+                  const blob = await pdf(<PeakWeekPDF profile={profile} protocol={protocol} showDate={contestDate} />).toBlob()
+                  const url = URL.createObjectURL(blob)
+                  const a = document.createElement('a')
+                  a.href = url
+                  a.download = `${profile.name.replace(/\s+/g, '-')}-peak-week-protocol.pdf`
+                  a.click()
+                  URL.revokeObjectURL(url)
+                } finally {
+                  setPeakWeekPdfLoading(false)
+                }
+              }}
+              disabled={peakWeekPdfLoading}
+              className="w-full py-2.5 text-xs font-bold bg-[var(--accent)] text-black disabled:opacity-50"
+              style={{ fontFamily: 'var(--font-heading), "Bebas Neue", impact, sans-serif', letterSpacing: '0.06em' }}
+            >
+              {peakWeekPdfLoading ? 'BUILDING PDF…' : 'DOWNLOAD PEAK WEEK PDF'}
+            </button>
           </div>
         )
       })()}

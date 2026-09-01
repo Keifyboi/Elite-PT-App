@@ -18,7 +18,18 @@ export interface UserProfile {
   dietBreakActive?: boolean
   dietBreakStartDate?: string
   contestDate?: string
+  division?: CompetitionDivision
 }
+
+export type CompetitionDivision =
+  | 'mens-bodybuilding'
+  | 'mens-classic-physique'
+  | 'mens-physique'
+  | 'womens-bodybuilding'
+  | 'womens-physique'
+  | 'womens-figure'
+  | 'womens-fitness'
+  | 'womens-bikini'
 
 export type TrainingPhilosophy =
   | 'mi40'

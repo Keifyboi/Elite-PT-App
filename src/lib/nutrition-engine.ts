@@ -1,4 +1,5 @@
-import type { UserProfile, MacroTargets, CarbCycleDay } from './types'
+import type { UserProfile, MacroTargets, CarbCycleDay, CompetitionDivision } from './types'
+import { DIVISIONS } from './data/divisions'
 
 // ─── BMR Formulas ───
 
@@ -536,41 +537,46 @@ export function contestPrepTimeline(
   }
 }
 
-// ─── Peak Week Multipliers (Norton) ───
+// ─── Peak Week Protocol (Norton) ───
+// Source: Layne Norton & Peter Baker — The Complete Contest Prep Guide
+// (BioLayne LLC, 2018). One universal 10-day curve applies to every division —
+// only the stage target body fat % (see data/divisions.ts) varies by division.
 
-export function peakWeekMacros(
-  normalMacros: MacroTargets,
-  daysOut: number,
-  division: 'bodybuilding' | 'bikini'
-): MacroTargets {
-  const bb: Record<number, { p: number; c: number; f: number }> = {
-    10: { p: 1.0, c: 0.7, f: 0.7 },
-    8: { p: 1.0, c: 0.7, f: 0.7 },
-    7: { p: 0.9, c: 1.0, f: 1.0 },
-    6: { p: 0.9, c: 1.0, f: 1.0 },
-    5: { p: 0.8, c: 2.5, f: 1.6 },
-    4: { p: 0.85, c: 1.9, f: 1.3 },
-    3: { p: 0.9, c: 1.3, f: 1.0 },
-    2: { p: 0.95, c: 0.7, f: 0.7 },
-    1: { p: 1.0, c: 1.0, f: 1.0 },
-    0: { p: 0.7, c: 2.25, f: 1.45 },
-  }
+interface PeakWeekMultiplier {
+  p: number
+  c: number
+  f: number
+  sodiumMultiplier: number
+  fibreTarget: string
+  waterTarget: string
+  trainingNote: string
+  cardioNote: string
+}
 
-  const bk: Record<number, { p: number; c: number; f: number }> = {
-    10: { p: 1.0, c: 0.7, f: 0.7 },
-    8: { p: 1.0, c: 0.7, f: 0.7 },
-    7: { p: 0.9, c: 1.0, f: 1.0 },
-    6: { p: 0.9, c: 1.0, f: 1.0 },
-    5: { p: 0.8, c: 1.9, f: 1.4 },
-    4: { p: 0.85, c: 1.5, f: 1.2 },
-    3: { p: 0.9, c: 1.1, f: 1.0 },
-    2: { p: 0.95, c: 0.7, f: 0.8 },
-    1: { p: 1.0, c: 1.0, f: 1.0 },
-    0: { p: 0.7, c: 1.55, f: 1.2 },
-  }
+const NORTON_PEAK_WEEK: Record<number, PeakWeekMultiplier> = {
+  10: { p: 1.0, c: 0.7, f: 0.7, sodiumMultiplier: 1.3, fibreTarget: '30+ g', waterTarget: '4 L', trainingNote: 'Normal + LISS', cardioNote: '1 LISS session' },
+  9: { p: 1.0, c: 0.7, f: 0.7, sodiumMultiplier: 1.3, fibreTarget: '30+ g', waterTarget: '4 L', trainingNote: 'Normal + LISS', cardioNote: '1 LISS session' },
+  8: { p: 1.0, c: 0.7, f: 0.7, sodiumMultiplier: 1.3, fibreTarget: '30+ g', waterTarget: '4 L', trainingNote: 'Normal + LISS', cardioNote: '1 LISS session' },
+  7: { p: 0.9, c: 1.0, f: 1.0, sodiumMultiplier: 1.2, fibreTarget: '25–30 g', waterTarget: '4 L', trainingNote: 'Normal', cardioNote: 'None' },
+  6: { p: 0.9, c: 1.0, f: 1.0, sodiumMultiplier: 1.2, fibreTarget: '25–30 g', waterTarget: '4 L', trainingNote: 'Normal', cardioNote: 'None' },
+  5: { p: 0.8, c: 2.5, f: 1.6, sodiumMultiplier: 1.0, fibreTarget: '15–20 g', waterTarget: '4 L', trainingNote: 'Legs + HIIT', cardioNote: 'HIIT session' },
+  4: { p: 0.85, c: 1.9, f: 1.3, sodiumMultiplier: 1.0, fibreTarget: '15–20 g', waterTarget: '4 L', trainingNote: 'Normal', cardioNote: 'None' },
+  3: { p: 0.9, c: 1.3, f: 1.0, sodiumMultiplier: 1.0, fibreTarget: '10–15 g', waterTarget: '4 L', trainingNote: 'Moderate + LISS', cardioNote: '1 LISS session' },
+  2: { p: 0.95, c: 0.7, f: 0.7, sodiumMultiplier: 1.0, fibreTarget: '5–10 g', waterTarget: '4 L', trainingNote: 'Circuit', cardioNote: 'None' },
+  1: { p: 1.0, c: 1.0, f: 1.0, sodiumMultiplier: 1.0, fibreTarget: '<10 g', waterTarget: '4 L', trainingNote: 'Circuit', cardioNote: 'None' },
+  0: { p: 0.7, c: 2.25, f: 1.45, sodiumMultiplier: 1.3, fibreTarget: '<5 g', waterTarget: 'Sip post-pump only', trainingNote: 'Pump only', cardioNote: 'None' },
+}
 
-  const table = division === 'bodybuilding' ? bb : bk
-  const mult = table[daysOut] ?? { p: 1, c: 1, f: 1 }
+export interface PeakWeekDayTargets extends MacroTargets {
+  sodiumMultiplier: number
+  fibreTarget: string
+  waterTarget: string
+  trainingNote: string
+  cardioNote: string
+}
+
+export function peakWeekMacros(normalMacros: MacroTargets, daysOut: number): PeakWeekDayTargets {
+  const mult = NORTON_PEAK_WEEK[daysOut] ?? NORTON_PEAK_WEEK[1]
 
   const protein = Math.round(normalMacros.protein * mult.p)
   const carbs = Math.round(normalMacros.carbs * mult.c)
@@ -582,5 +588,16 @@ export function peakWeekMacros(
     fats,
     calories: protein * 4 + carbs * 4 + fats * 9,
     fiber: normalMacros.fiber,
+    sodiumMultiplier: mult.sodiumMultiplier,
+    fibreTarget: mult.fibreTarget,
+    waterTarget: mult.waterTarget,
+    trainingNote: mult.trainingNote,
+    cardioNote: mult.cardioNote,
   }
+}
+
+// ─── Division-specific stage target body fat % (SETUP!C19) ───
+
+export function getDivisionTargetBodyFat(division: CompetitionDivision): number {
+  return DIVISIONS[division].targetStageBodyFatPercent
 }

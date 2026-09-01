@@ -1,10 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import type { UserProfile } from '@/lib/types'
+import type { UserProfile, CompetitionDivision } from '@/lib/types'
 import { saveProfile } from '@/lib/storage'
 import { determineActivityFactor, recommendedSteps } from '@/lib/nutrition-engine'
 import { prescribeStrategy, type PrescribedStrategy } from '@/lib/prescribe-strategy'
+import { DIVISIONS } from '@/lib/data/divisions'
 
 type Step = 'basics' | 'goal' | 'training' | 'summary' | 'strategy'
 const STEPS: Step[] = ['basics', 'goal', 'training', 'summary', 'strategy']
@@ -69,6 +70,7 @@ export default function ProfileSetup({ onComplete }: { onComplete: (p: UserProfi
   const [bodyFatPercent, setBodyFatPercent] = useState('')
   const [occupation, setOccupation] = useState<'sedentary' | 'light-active' | 'active' | 'very-active'>('sedentary')
   const [goal, setGoal] = useState<'bulk' | 'cut' | 'maintain' | 'contest-prep'>('cut')
+  const [division, setDivision] = useState<CompetitionDivision | ''>('')
 
   // Training history
   const [trainingYears, setTrainingYears] = useState<TrainingYears | ''>('')
@@ -126,6 +128,7 @@ export default function ProfileSetup({ onComplete }: { onComplete: (p: UserProfi
       dailyStepTarget: strategy.stepsTarget,
       trainingDaysPerWeek: strategy.trainingDaysPerWeek,
       occupation,
+      division: division || undefined,
       programStartDate: (() => {
         const tomorrow = new Date()
         tomorrow.setDate(tomorrow.getDate() + 1)
@@ -215,6 +218,23 @@ export default function ProfileSetup({ onComplete }: { onComplete: (p: UserProfi
           <GoalButton selected={goal === 'bulk'} onClick={() => setGoal('bulk')} title="Build Muscle" desc="Add size with minimal fat gain" />
           <GoalButton selected={goal === 'maintain'} onClick={() => setGoal('maintain')} title="Maintain / Recomp" desc="Hold where you are, improve composition" />
           <GoalButton selected={goal === 'contest-prep'} onClick={() => setGoal('contest-prep')} title="Contest Prep" desc="Stage-ready conditioning for competition" />
+
+          {goal === 'contest-prep' && (
+            <div>
+              <label className="text-xs text-[var(--muted)] block mb-1">Division</label>
+              <select
+                value={division}
+                onChange={e => setDivision(e.target.value as CompetitionDivision)}
+                className="w-full bg-[var(--surface)] border border-[var(--card-border)] px-3 py-2.5 text-sm outline-none focus:border-[var(--accent)]"
+              >
+                <option value="">Select division…</option>
+                {(Object.entries(DIVISIONS) as [CompetitionDivision, { label: string }][]).map(([id, d]) => (
+                  <option key={id} value={id}>{d.label}</option>
+                ))}
+              </select>
+              <p className="text-[10px] text-[var(--muted)] mt-1">Sets your stage-ready body fat target and peak week protocol.</p>
+            </div>
+          )}
         </div>
       )}
 
