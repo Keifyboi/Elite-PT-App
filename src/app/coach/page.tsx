@@ -2,6 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { getSupabaseClient } from '@/lib/supabase'
+import { calculateMacros } from '@/lib/nutrition-engine'
+import { getCurrentPhase } from '@/lib/philosophy-engine'
+import type { UserProfile, TrainingPhilosophy } from '@/lib/types'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -15,6 +18,10 @@ interface ClientProfile {
   program_start_date: string | null
   age?: number | null
   sex?: string | null
+  occupation?: string | null
+  activity_factor?: number | null
+  training_days_per_week?: number | null
+  daily_step_target?: number | null
 }
 
 interface ClientRow {
@@ -174,6 +181,31 @@ function daysBetween(dateStr: string | null | undefined, now: Date): number {
 function totalCompScore(scores: CheckIn['competency_scores']): number {
   if (!scores) return 0
   return scores.nutrition + scores.training + scores.recovery + scores.mindset + scores.consistency
+}
+
+// Reuses the exact same calculation the client's own app runs, so the coach
+// sees the identical targets rather than a second, possibly-drifting formula.
+// Returns null when the synced profile doesn't have enough fields yet
+// (e.g. an older row from before occupation/activity fields were synced).
+function computeClientMacros(p: ClientProfile | null) {
+  if (!p || p.weight_kg == null || p.body_fat_percent == null || p.age == null || !p.sex || !p.goal) return null
+  const profile: UserProfile = {
+    name: '',
+    age: p.age,
+    heightCm: 0,
+    weightKg: p.weight_kg,
+    sex: p.sex as UserProfile['sex'],
+    bodyFatPercent: p.body_fat_percent,
+    activityFactor: (p.activity_factor as UserProfile['activityFactor']) ?? 1.55,
+    goal: p.goal as UserProfile['goal'],
+    trainingPhilosophy: (p.training_philosophy as TrainingPhilosophy) ?? 'hit',
+    currentPhase: p.current_phase ?? '',
+    weekNumber: p.week_number ?? 1,
+    dailyStepTarget: p.daily_step_target ?? 8000,
+    trainingDaysPerWeek: p.training_days_per_week ?? 5,
+    occupation: (p.occupation as UserProfile['occupation']) ?? 'sedentary',
+  }
+  return calculateMacros(profile)
 }
 
 function checkInDaysAgo(client: EnrichedClient): number | null {
@@ -422,7 +454,8 @@ export default function CoachPortal() {
         id, name, email, tier,
         client_profiles (
           current_phase, week_number, weight_kg, body_fat_percent,
-          training_philosophy, goal, program_start_date, age, sex
+          training_philosophy, goal, program_start_date, age, sex,
+          occupation, activity_factor, training_days_per_week, daily_step_target
         )
       `)
       .eq('coach_id', cId)
@@ -889,6 +922,10 @@ function ClientDetail({
   const days = client.daysSinceCheckIn
 
   const sectionScoreColor = (v: number) => v >= 80 ? 'var(--success)' : v >= 60 ? 'var(--accent)' : 'var(--danger)'
+  const macros = computeClientMacros(p)
+  const currentPhaseConfig = p?.training_philosophy && p?.current_phase
+    ? getCurrentPhase(p.training_philosophy as TrainingPhilosophy, p.current_phase)
+    : undefined
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 860 }}>
@@ -906,7 +943,9 @@ function ClientDetail({
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
           {client.tier && <Badge>{client.tier}</Badge>}
           {p?.current_phase && <Badge variant="accent">{p.current_phase}</Badge>}
-          {p?.week_number != null && <Badge>Week {p.week_number}</Badge>}
+          {p?.week_number != null && (
+            <Badge>Week {p.week_number}{currentPhaseConfig ? ` of ${currentPhaseConfig.durationWeeks}` : ''}</Badge>
+          )}
           {p?.training_philosophy && <Badge>{p.training_philosophy}</Badge>}
         </div>
         <div style={{ fontSize: 11, color: 'var(--muted)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
@@ -924,6 +963,21 @@ function ClientDetail({
         <StatCard label="Competency" value={ci?.competency_scores ? `${compTotal}/25` : '—'} />
         <StatCard label="Last Check-In" value={days != null ? (days === 0 ? 'Today' : `${days}d ago`) : 'None'} />
       </div>
+
+      {/* ── Section 2b: Nutrition targets (same formula as the client's own app) ── */}
+      {macros && (
+        <div>
+          <div style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: '0.08em', marginBottom: 8 }}>
+            CURRENT TARGETS
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+            <StatCard label="Target Kcal" value={String(macros.calories)} />
+            <StatCard label="Protein" value={`${macros.protein}g`} />
+            <StatCard label="Carbs" value={`${macros.carbs}g`} />
+            <StatCard label="Fats" value={`${macros.fats}g`} />
+          </div>
+        </div>
+      )}
 
       {/* ── Section 3: Active flags ── */}
       {flags.length > 0 && (
