@@ -47,9 +47,11 @@ export async function syncProfileToSupabase(profile: UserProfile): Promise<void>
     updated_at: new Date().toISOString(),
   }
 
-  await getSupabaseClient()
+  const { error } = await getSupabaseClient()
     .from('client_profiles')
     .upsert(row, { onConflict: 'user_id' })
+
+  if (error) throw error
 }
 
 export async function fetchProfileFromSupabase(): Promise<UserProfile | null> {
@@ -91,12 +93,38 @@ export async function syncCheckInToSupabase(checkIn: WeeklyCheckIn): Promise<voi
   const userId = await getUserId()
   if (!userId) return
 
-  await getSupabaseClient()
+  // check_ins' columns are snake_case and don't line up 1:1 with WeeklyCheckIn's
+  // camelCase fields — map explicitly rather than spreading, so a mismatched key
+  // doesn't silently make PostgREST reject the whole upsert.
+  const row = {
+    id: checkIn.id,
+    user_id: userId,
+    week_number: checkIn.weekNumber,
+    date: checkIn.date,
+    weight_kg: checkIn.weightKg,
+    body_fat_percent: checkIn.bodyFatPercent,
+    measurements: checkIn.measurements,
+    photos: checkIn.photos,
+    subjective: checkIn.subjective,
+    macro_adherence: checkIn.macroAdherence,
+    training_adherence: checkIn.trainingAdherence,
+    meals_per_day: checkIn.mealsPerDay ?? null,
+    hunger_rating: checkIn.hungerRating ?? null,
+    cravings_level: checkIn.cravingsLevel ?? null,
+    alcohol_sessions: checkIn.alcoholSessions ?? null,
+    meal_prep_done: checkIn.mealPrepDone ?? null,
+    hours_of_sleep: checkIn.hoursOfSleep ?? null,
+    injury_niggle: checkIn.injuryNiggle ?? null,
+    stretching_done: checkIn.stretchingDone ?? null,
+    execution_quality: checkIn.executionQuality ?? null,
+    competency_scores: checkIn.competencyScores ?? null,
+  }
+
+  const { error } = await getSupabaseClient()
     .from('check_ins')
-    .upsert(
-      { user_id: userId, ...checkIn, updated_at: new Date().toISOString() },
-      { onConflict: 'user_id,id' }
-    )
+    .upsert(row, { onConflict: 'id' })
+
+  if (error) throw error
 }
 
 export async function fetchCheckInsFromSupabase(): Promise<WeeklyCheckIn[]> {

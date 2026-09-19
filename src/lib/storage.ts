@@ -1,5 +1,6 @@
 import type { UserProfile, WorkoutDay, MealPlan, WeeklyCheckIn, SupplementLog, TrainingBlock } from './types'
 import type { HabitLog } from './habits'
+import { syncProfileToSupabase, syncCheckInToSupabase } from './supabase-storage'
 
 export const SCHEMA_VERSION = 2
 
@@ -52,6 +53,11 @@ export function getProfile(): UserProfile | null {
 
 export function saveProfile(profile: UserProfile): void {
   set(KEYS.profile, profile)
+  // localStorage is the source of truth and always wins; this just keeps the
+  // coach-portal-facing copy in Supabase current. Fire-and-forget, but logged
+  // (not silently swallowed) so a broken sync surfaces instead of quietly
+  // leaving the coach portal empty, as previously happened.
+  syncProfileToSupabase(profile).catch(err => console.error('Supabase profile sync failed:', err))
 }
 
 // Resets training progression to week 1 on a fresh block/phase, anchored to
@@ -272,4 +278,5 @@ export function saveCheckIn(checkin: WeeklyCheckIn): void {
     all.push(checkin)
   }
   set(KEYS.checkins, all)
+  syncCheckInToSupabase(checkin).catch(err => console.error('Supabase check-in sync failed:', err))
 }
