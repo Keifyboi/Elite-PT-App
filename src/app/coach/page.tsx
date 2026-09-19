@@ -66,6 +66,53 @@ interface ClientFlag {
   created_at: string
 }
 
+// ─── View-as-client (read-only) ───
+
+interface WorkoutSetRow {
+  setNumber: number
+  targetReps: string
+  actualReps?: number
+  weight?: number
+  rpe?: number
+  completed: boolean
+}
+
+interface WorkoutExerciseRow {
+  name: string
+  targetMuscle: string
+  sets: WorkoutSetRow[]
+  notes?: string
+}
+
+interface WorkoutLogRow {
+  date: string
+  week_number: number | null
+  philosophy: string | null
+  exercises: WorkoutExerciseRow[] | null
+  notes: string | null
+  execution_quality: number | null
+}
+
+interface MealFoodRow {
+  name: string
+  grams?: number
+  calories?: number
+}
+
+interface MealRow {
+  name: string
+  time?: string
+  foods: MealFoodRow[]
+  totals?: { calories: number; protein: number; carbs: number; fats: number }
+}
+
+interface MealPlanRow {
+  date: string
+  meals: MealRow[] | null
+  target_calories: number | null
+  logged_calories: number | null
+}
+
 interface EnrichedClient {
   id: string
   name: string
@@ -76,6 +123,8 @@ interface EnrichedClient {
   recentCheckIns: CheckIn[]
   flags: ClientFlag[]
   daysSinceCheckIn: number | null
+  latestWorkout: WorkoutLogRow | null
+  latestMealPlan: MealPlanRow | null
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -365,12 +414,26 @@ export default function CoachPortal() {
           ? (c.client_profiles[0] ?? null)
           : (c.client_profiles ?? null)
 
-        const { data: checkIns } = await supabase
-          .from('check_ins')
-          .select('*')
-          .eq('user_id', c.id)
-          .order('week_number', { ascending: false })
-          .limit(3)
+        const [{ data: checkIns }, { data: workoutRows }, { data: mealRows }] = await Promise.all([
+          supabase
+            .from('check_ins')
+            .select('*')
+            .eq('user_id', c.id)
+            .order('week_number', { ascending: false })
+            .limit(3),
+          supabase
+            .from('workout_logs')
+            .select('date, week_number, philosophy, exercises, notes, execution_quality')
+            .eq('user_id', c.id)
+            .order('date', { ascending: false })
+            .limit(1),
+          supabase
+            .from('meal_plans')
+            .select('date, meals, target_calories, logged_calories')
+            .eq('user_id', c.id)
+            .order('date', { ascending: false })
+            .limit(1),
+        ])
 
         const recentCheckIns: CheckIn[] = checkIns ?? []
         const latestCheckIn = recentCheckIns[0] ?? null
@@ -386,6 +449,8 @@ export default function CoachPortal() {
           recentCheckIns,
           flags: existingFlags,
           daysSinceCheckIn: latestCheckIn ? daysBetween(latestCheckIn.date, now) : null,
+          latestWorkout: (workoutRows?.[0] as WorkoutLogRow) ?? null,
+          latestMealPlan: (mealRows?.[0] as MealPlanRow) ?? null,
         }
 
         // 4. Auto-generate flags
@@ -820,6 +885,81 @@ function ClientDetail({
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* ── Section 3b: View as client — latest training & nutrition (read-only) ── */}
+      {(client.latestWorkout || client.latestMealPlan) && (
+        <div style={{
+          background: 'var(--card)',
+          border: '1px solid var(--card-border)',
+          padding: '18px 20px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 18,
+        }}>
+          <div style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: '0.08em' }}>
+            VIEW AS CLIENT — MOST RECENT SESSION
+          </div>
+
+          {client.latestWorkout && (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
+                <div style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                  Training — {client.latestWorkout.date}
+                  {client.latestWorkout.week_number != null && ` · Week ${client.latestWorkout.week_number}`}
+                </div>
+                {client.latestWorkout.philosophy && <Badge>{client.latestWorkout.philosophy}</Badge>}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {(client.latestWorkout.exercises ?? []).map((ex, i) => (
+                  <div key={i} style={{ background: 'var(--surface)', border: '1px solid var(--card-border)', padding: '8px 12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 4 }}>
+                      <span style={{ color: 'var(--foreground)' }}>{ex.name}</span>
+                      <span style={{ color: 'var(--muted)' }}>{ex.targetMuscle}</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 10, color: 'var(--muted)' }}>
+                      {ex.sets.map((s, si) => (
+                        <span key={si}>
+                          {s.actualReps != null ? `${s.actualReps}` : s.targetReps}
+                          {s.weight != null ? `×${s.weight}kg` : ''}
+                          {s.rpe != null ? ` @${s.rpe}` : ''}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {client.latestWorkout.notes && (
+                <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 8 }}>{client.latestWorkout.notes}</div>
+              )}
+            </div>
+          )}
+
+          {client.latestMealPlan && (
+            <div>
+              <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 10, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                Nutrition — {client.latestMealPlan.date}
+                {client.latestMealPlan.target_calories != null && client.latestMealPlan.logged_calories != null && (
+                  <span style={{ marginLeft: 8, color: 'var(--foreground)', textTransform: 'none', letterSpacing: 0 }}>
+                    {client.latestMealPlan.logged_calories} / {client.latestMealPlan.target_calories} kcal
+                  </span>
+                )}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {(client.latestMealPlan.meals ?? []).map((meal, i) => (
+                  <div key={i} style={{ background: 'var(--surface)', border: '1px solid var(--card-border)', padding: '8px 12px' }}>
+                    <div style={{ fontSize: 11, color: 'var(--foreground)', marginBottom: 4 }}>
+                      {meal.name}{meal.time ? ` · ${meal.time}` : ''}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--muted)' }}>
+                      {meal.foods.map(f => f.name).join(', ')}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

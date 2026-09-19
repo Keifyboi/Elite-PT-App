@@ -3,14 +3,8 @@
 // All functions are async and scoped to the authenticated user
 
 import { getSupabaseClient } from './supabase'
-import type { UserProfile, WeeklyCheckIn, MealPlan } from './types'
+import type { UserProfile, WeeklyCheckIn, MealPlan, WorkoutDay } from './types'
 import type { HabitLog } from './habits'
-
-// ─── Workout log shape for Supabase ───
-export interface WorkoutLog {
-  date: string
-  data: Record<string, unknown>
-}
 
 // ─── Auth helper ───
 async function getUserId(): Promise<string | null> {
@@ -166,44 +160,46 @@ export async function fetchCheckInsFromSupabase(): Promise<WeeklyCheckIn[]> {
 
 // ─── Workout logs ───
 
-export async function syncWorkoutToSupabase(log: WorkoutLog): Promise<void> {
+export async function syncWorkoutToSupabase(workout: WorkoutDay, weekNumber: number): Promise<void> {
   const userId = await getUserId()
   if (!userId) return
 
-  await getSupabaseClient()
+  const row = {
+    user_id: userId,
+    date: workout.date,
+    week_number: weekNumber,
+    philosophy: workout.philosophy,
+    exercises: workout.exercises,
+    notes: workout.notes || null,
+    execution_quality: workout.executionQuality ?? null,
+  }
+
+  const { error } = await getSupabaseClient()
     .from('workout_logs')
-    .upsert(
-      { user_id: userId, date: log.date, data: log.data, updated_at: new Date().toISOString() },
-      { onConflict: 'user_id,date' }
-    )
-}
+    .upsert(row, { onConflict: 'user_id,date' })
 
-export async function fetchWorkoutsFromSupabase(): Promise<WorkoutLog[]> {
-  const userId = await getUserId()
-  if (!userId) return []
-
-  const { data, error } = await getSupabaseClient()
-    .from('workout_logs')
-    .select('date, data')
-    .eq('user_id', userId)
-    .order('date', { ascending: false })
-
-  if (error || !data) return []
-  return data as WorkoutLog[]
+  if (error) throw error
 }
 
 // ─── Meal plans ───
 
-export async function syncMealPlanToSupabase(date: string, meals: MealPlan[]): Promise<void> {
+export async function syncMealPlanToSupabase(plan: MealPlan): Promise<void> {
   const userId = await getUserId()
   if (!userId) return
 
-  await getSupabaseClient()
+  const row = {
+    user_id: userId,
+    date: plan.date,
+    meals: plan.meals,
+    target_calories: plan.targets.calories,
+    logged_calories: plan.totals.calories,
+  }
+
+  const { error } = await getSupabaseClient()
     .from('meal_plans')
-    .upsert(
-      { user_id: userId, date, meals, updated_at: new Date().toISOString() },
-      { onConflict: 'user_id,date' }
-    )
+    .upsert(row, { onConflict: 'user_id,date' })
+
+  if (error) throw error
 }
 
 // ─── Habit logs ───

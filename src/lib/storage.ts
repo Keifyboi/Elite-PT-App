@@ -1,6 +1,6 @@
 import type { UserProfile, WorkoutDay, MealPlan, WeeklyCheckIn, SupplementLog, TrainingBlock } from './types'
 import type { HabitLog } from './habits'
-import { syncProfileToSupabase, syncCheckInToSupabase } from './supabase-storage'
+import { syncProfileToSupabase, syncCheckInToSupabase, syncWorkoutToSupabase, syncMealPlanToSupabase } from './supabase-storage'
 
 export const SCHEMA_VERSION = 2
 
@@ -95,6 +95,12 @@ export function saveWorkout(workout: WorkoutDay): void {
     all.push(workout)
   }
   set(KEYS.workouts, all)
+
+  const profile = getProfile()
+  if (profile) {
+    const weekNumber = getCurrentWeekNumber(profile)
+    syncWorkoutToSupabase(workout, weekNumber).catch(err => console.error('Supabase workout sync failed:', err))
+  }
 }
 
 export function getTodayWorkout(): WorkoutDay | undefined {
@@ -117,6 +123,7 @@ export function saveMealPlan(plan: MealPlan): void {
     all.push(plan)
   }
   set(KEYS.meals, all)
+  syncMealPlanToSupabase(plan).catch(err => console.error('Supabase meal plan sync failed:', err))
 }
 
 export function getTodayMealPlan(): MealPlan | undefined {
