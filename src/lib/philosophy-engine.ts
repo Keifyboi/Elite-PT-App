@@ -417,7 +417,10 @@ export const PHILOSOPHY_PHASES: Record<TrainingPhilosophy, PhaseConfig[]> = {
         tempoDefault: '3-0-1-0',
         intensifierFrequency: 'none',
         splitType: 'upper-lower-2x',
-        split: { day1: 'Upper', day2: 'Lower', day3: 'Upper', day4: 'Lower', day5: 'Weak Points' },
+        // Day labels match CONTEST_PREP_TEMPLATES' keys exactly (getTemplateForSplit
+        // exact-matches on these) so all 5 hand-authored templates are reachable —
+        // generic 'Upper'/'Lower' labels previously collided on partial match.
+        split: { day1: 'Upper Body Power', day2: 'Lower Body Power', day3: 'Back & Shoulders Hypertrophy', day4: 'Lower Body Hypertrophy', day5: 'Chest & Arms Hypertrophy' },
       },
       cardioProtocol: { type: 'mixed', sessionsPerWeek: 3, durationMinutes: 25 },
       supplementProtocol: [
@@ -443,7 +446,7 @@ export const PHILOSOPHY_PHASES: Record<TrainingPhilosophy, PhaseConfig[]> = {
         tempoDefault: '3-0-1-0',
         intensifierFrequency: 'last-set',
         splitType: 'upper-lower-2x',
-        split: { day1: 'Upper', day2: 'Lower', day3: 'Upper', day4: 'Lower', day5: 'Weak Points' },
+        split: { day1: 'Upper Body Power', day2: 'Lower Body Power', day3: 'Back & Shoulders Hypertrophy', day4: 'Lower Body Hypertrophy', day5: 'Chest & Arms Hypertrophy' },
       },
       cardioProtocol: { type: 'mixed', sessionsPerWeek: 4, durationMinutes: 30 },
       supplementProtocol: [],
@@ -463,6 +466,10 @@ export const PHILOSOPHY_PHASES: Record<TrainingPhilosophy, PhaseConfig[]> = {
         tempoDefault: '3-0-1-0',
         intensifierFrequency: 'none',
         splitType: 'peak-week',
+        // No hand-authored Peak Week template exists in CONTEST_PREP_TEMPLATES, so these
+        // labels intentionally don't exact-match one — they correctly resolve through
+        // parseSplitDay's fuzzy matching to the right body parts for the algorithmic
+        // fallback instead (a single light week doesn't need bespoke RPE-8 content).
         split: { day1: 'Legs', day2: 'Chest', day3: 'Back', day4: 'Shoulders', day5: 'Arms' },
       },
       cardioProtocol: { type: 'liss', sessionsPerWeek: 2, durationMinutes: 20 },

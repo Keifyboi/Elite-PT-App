@@ -27,15 +27,39 @@ describe('trap-specific volume is present across all philosophies', () => {
     })
   }
 
-  // Contest-Prep's phase-level split ('Upper'/'Lower'/'Weak Points') doesn't
-  // align with its own template's richer day keys, so 'Back & Shoulders
-  // Hypertrophy' is unreachable via generateWorkout(dayNumber) today (a
-  // separate, pre-existing routing bug — flagged, not fixed here). Test the
-  // template content directly instead, since that's what this fix changed.
   it('Contest Prep — Back & Shoulders Hypertrophy template includes dedicated trap work', () => {
     const template = getTemplateForSplit('contest-prep', 'Mid Prep (12-8 weeks out)', 'Back & Shoulders Hypertrophy')
     expect(template).not.toBeNull()
     expect(template!.exercises.some(e => e.bodyPart === 'traps')).toBe(true)
+  })
+})
+
+// Regression test for the Contest-Prep routing bug: Mid Prep's phase-level
+// split previously used generic 'Upper'/'Lower' labels that only partial-matched
+// the FIRST word-overlapping template key, making day3/day5 unreachable via
+// generateWorkout(dayNumber). Split labels now match CONTEST_PREP_TEMPLATES'
+// keys exactly, so all 5 authored templates are reachable once each per week.
+describe('Contest Prep day routing reaches all 5 authored templates', () => {
+  const cases: { dayNumber: number; expectedSplitDay: string }[] = [
+    { dayNumber: 1, expectedSplitDay: 'Upper Body Power' },
+    { dayNumber: 2, expectedSplitDay: 'Lower Body Power' },
+    { dayNumber: 3, expectedSplitDay: 'Back & Shoulders Hypertrophy' },
+    { dayNumber: 4, expectedSplitDay: 'Lower Body Hypertrophy' },
+    { dayNumber: 5, expectedSplitDay: 'Chest & Arms Hypertrophy' },
+  ]
+
+  for (const { dayNumber, expectedSplitDay } of cases) {
+    it(`day${dayNumber} routes to the "${expectedSplitDay}" template`, () => {
+      const workout = generateWorkout('contest-prep', 'Mid Prep (12-8 weeks out)', dayNumber, '2026-01-05', 1, false)
+      expect(workout).not.toBeNull()
+      expect(workout!.splitDay).toBe(expectedSplitDay)
+    })
+  }
+
+  it('day3 workout now includes dedicated trap work (was unreachable before the fix)', () => {
+    const workout = generateWorkout('contest-prep', 'Mid Prep (12-8 weeks out)', 3, '2026-01-05', 1, false)
+    expect(workout).not.toBeNull()
+    expect(workout!.exercises.some(e => e.targetMuscle === 'traps')).toBe(true)
   })
 })
 
@@ -56,10 +80,10 @@ describe('back width and thickness are both represented where a back day exists'
     })
   }
 
-  it('Contest Prep — Back & Shoulders Hypertrophy template has both (tested directly, see routing-bug note above)', () => {
-    const template = getTemplateForSplit('contest-prep', 'Mid Prep (12-8 weeks out)', 'Back & Shoulders Hypertrophy')
-    expect(template).not.toBeNull()
-    const muscles = new Set(template!.exercises.map(e => e.bodyPart))
+  it('Contest Prep — day3 (Back & Shoulders Hypertrophy) has both', () => {
+    const workout = generateWorkout('contest-prep', 'Mid Prep (12-8 weeks out)', 3, '2026-01-05', 1, false)
+    expect(workout).not.toBeNull()
+    const muscles = new Set(workout!.exercises.map(e => e.targetMuscle))
     expect(muscles.has('back-width')).toBe(true)
     expect(muscles.has('back-thickness')).toBe(true)
   })
