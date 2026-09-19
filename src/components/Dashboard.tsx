@@ -44,7 +44,7 @@ function Card({ children, style }: { children: React.ReactNode; style?: React.CS
   )
 }
 
-export default function Dashboard() {
+export default function Dashboard({ isCoach = false }: { isCoach?: boolean }) {
   const { refreshProfile } = useProfile()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [macros, setMacros] = useState<MacroTargets | null>(null)
@@ -178,15 +178,37 @@ export default function Dashboard() {
               {profile.name ? `HEY ${profile.name.toUpperCase()}` : 'DASHBOARD'}
             </h1>
           </div>
-          <button
-            onClick={() => setShowSettings(true)}
-            style={{ width: 36, height: 36, background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 4, flexShrink: 0 }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
-            </svg>
-          </button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4, flexShrink: 0 }}>
+            {isCoach && (
+              <a
+                href="/coach"
+                style={{
+                  fontSize: 10,
+                  color: '#c9a84c',
+                  letterSpacing: '0.06em',
+                  border: '1px solid #2a2a2a',
+                  borderRadius: 8,
+                  padding: '0 10px',
+                  height: 36,
+                  display: 'flex',
+                  alignItems: 'center',
+                  textDecoration: 'none',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                COACH PORTAL
+              </a>
+            )}
+            <button
+              onClick={() => setShowSettings(true)}
+              style={{ width: 36, height: 36, background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
 

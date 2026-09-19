@@ -18,10 +18,15 @@ export default function Home() {
   const [hasProfile, setHasProfile] = useState<boolean | null>(null)
   const [authed, setAuthed] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [isCoach, setIsCoach] = useState(false)
 
   useEffect(() => {
     const supabase = getSupabaseClient()
 
+    // A coach account (Keith's included) is also a trainee of their own
+    // program, so signing in always lands here on the client app — never an
+    // automatic bounce to /coach, which would otherwise lock a coach out of
+    // their own training view. isCoach just adds a way back to the portal.
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         supabase
@@ -30,11 +35,8 @@ export default function Home() {
           .eq('id', session.user.id)
           .single()
           .then(({ data }) => {
-            if (data?.role === 'coach') {
-              window.location.href = '/coach'
-            } else {
-              setAuthed(true)
-            }
+            setIsCoach(data?.role === 'coach')
+            setAuthed(true)
             setLoading(false)
           })
       } else {
@@ -50,11 +52,8 @@ export default function Home() {
           .eq('id', session.user.id)
           .single()
           .then(({ data }) => {
-            if (data?.role === 'coach') {
-              window.location.href = '/coach'
-            } else {
-              setAuthed(true)
-            }
+            setIsCoach(data?.role === 'coach')
+            setAuthed(true)
           })
       }
       if (event === 'SIGNED_OUT') {
@@ -99,7 +98,7 @@ export default function Home() {
     <ProfileProvider>
       <div className="min-h-screen pb-20">
         <div className="max-w-lg mx-auto w-full">
-          {activeTab === 'dashboard' && <Dashboard />}
+          {activeTab === 'dashboard' && <Dashboard isCoach={isCoach} />}
           {activeTab === 'workout' && <WorkoutTracker />}
           {activeTab === 'nutrition' && <NutritionTracker />}
           {activeTab === 'supplements' && <SupplementTracker />}
