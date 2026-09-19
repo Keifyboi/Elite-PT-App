@@ -113,6 +113,42 @@ interface MealPlanRow {
   logged_calories: number | null
 }
 
+// ─── Prescribe workout (write) ───
+
+interface PrescribeExerciseForm {
+  name: string
+  targetMuscle: string
+  setsCount: number
+  targetReps: string
+  notes: string
+}
+
+interface PrescribeForm {
+  date: string
+  philosophy: string
+  splitDay: string
+  phase: string
+  dayNotes: string
+  exercises: PrescribeExerciseForm[]
+}
+
+const TRAINING_PHILOSOPHIES = ['y3t', 'mi40', 'fst7', 'phat', 'corey-g', 'incredible-bulk', 'dtp', 'hit', 'bompa', 'contest-prep']
+
+const EMPTY_EXERCISE: PrescribeExerciseForm = { name: '', targetMuscle: '', setsCount: 3, targetReps: '8-12', notes: '' }
+
+function emptyPrescribeForm(): PrescribeForm {
+  const tomorrow = new Date()
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  return {
+    date: tomorrow.toISOString().split('T')[0],
+    philosophy: 'y3t',
+    splitDay: '',
+    phase: '',
+    dayNotes: '',
+    exercises: [{ ...EMPTY_EXERCISE }],
+  }
+}
+
 interface EnrichedClient {
   id: string
   name: string
@@ -514,6 +550,59 @@ export default function CoachPortal() {
     setTimeout(() => setSaveMsg(null), 3000)
   }
 
+  async function handlePrescribeWorkout(clientId: string, form: PrescribeForm): Promise<boolean> {
+    const exercises = form.exercises.map((ex, i) => ({
+      id: crypto.randomUUID(),
+      exerciseId: ex.name.trim().toLowerCase().replace(/\s+/g, '-'),
+      name: ex.name.trim(),
+      targetMuscle: ex.targetMuscle.trim(),
+      sets: Array.from({ length: Math.max(1, ex.setsCount) }, (_, si) => ({
+        setNumber: si + 1,
+        targetReps: ex.targetReps.trim() || '8-12',
+        completed: false,
+      })),
+      tempo: '3-0-1-0',
+      restSeconds: 90,
+      notes: ex.notes.trim(),
+      order: i,
+    }))
+
+    const { error } = await supabase.from('workout_logs').upsert(
+      {
+        user_id: clientId,
+        date: form.date,
+        philosophy: form.philosophy,
+        split_day: form.splitDay || null,
+        phase: form.phase || null,
+        exercises,
+        notes: form.dayNotes || null,
+        coach_edited: true,
+      },
+      { onConflict: 'user_id,date' }
+    )
+
+    if (error) return false
+
+    setClients((prev) =>
+      prev.map((c) =>
+        c.id === clientId
+          ? {
+              ...c,
+              latestWorkout: {
+                date: form.date,
+                week_number: c.profile?.week_number ?? null,
+                philosophy: form.philosophy,
+                exercises,
+                notes: form.dayNotes || null,
+                execution_quality: null,
+              },
+            }
+          : c
+      )
+    )
+    return true
+  }
+
   async function handleResolveFlag(flagId: string) {
     await supabase.from('client_flags').update({ resolved: true }).eq('id', flagId)
     setClients((prev) =>
@@ -741,6 +830,7 @@ export default function CoachPortal() {
               saveMsg={saveMsg}
               onSave={handleSaveReview}
               onResolveFlag={handleResolveFlag}
+              onPrescribeWorkout={handlePrescribeWorkout}
               trendArrow={trendArrow}
               trendColor={trendColor}
             />
@@ -778,6 +868,7 @@ function ClientDetail({
   onResolveFlag,
   trendArrow,
   trendColor,
+  onPrescribeWorkout,
 }: {
   client: EnrichedClient
   reviewDraft: { loomUrl: string; notes: string; promotionRecommended: boolean; coachReviewed: boolean }
@@ -788,6 +879,7 @@ function ClientDetail({
   onResolveFlag: (id: string) => void
   trendArrow: (a: number | null, b: number | null, lbg?: boolean) => string
   trendColor: (a: number | null, b: number | null, lbg?: boolean) => string
+  onPrescribeWorkout: (clientId: string, form: PrescribeForm) => Promise<boolean>
 }) {
   const p = client.profile
   const ci = client.latestCheckIn
@@ -962,6 +1054,9 @@ function ClientDetail({
           )}
         </div>
       )}
+
+      {/* ── Section 3c: Prescribe an upcoming workout ── */}
+      <PrescribeWorkoutPanel clientId={client.id} onPrescribe={onPrescribeWorkout} />
 
       {/* ── Section 4: Latest check-in ── */}
       {ci ? (
@@ -1252,6 +1347,214 @@ function ClientDetail({
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Prescribe Workout Panel ──────────────────────────────────────────────────
+// Lets a coach set an upcoming day's workout before the client reaches it.
+// The client's app checks Supabase for a coach_edited row before generating
+// its own on that date — see fetchCoachPrescribedWorkout in supabase-storage.ts.
+
+function PrescribeWorkoutPanel({
+  clientId,
+  onPrescribe,
+}: {
+  clientId: string
+  onPrescribe: (clientId: string, form: PrescribeForm) => Promise<boolean>
+}) {
+  const [open, setOpen] = useState(false)
+  const [form, setForm] = useState<PrescribeForm>(emptyPrescribeForm)
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+
+  const updateExercise = (i: number, patch: Partial<PrescribeExerciseForm>) => {
+    setForm((f) => ({
+      ...f,
+      exercises: f.exercises.map((ex, idx) => (idx === i ? { ...ex, ...patch } : ex)),
+    }))
+  }
+
+  const addExercise = () => setForm((f) => ({ ...f, exercises: [...f.exercises, { ...EMPTY_EXERCISE }] }))
+  const removeExercise = (i: number) => setForm((f) => ({ ...f, exercises: f.exercises.filter((_, idx) => idx !== i) }))
+
+  async function handleSave() {
+    if (!form.date || form.exercises.every((ex) => !ex.name.trim())) {
+      setMsg('Add at least one exercise.')
+      return
+    }
+    setSaving(true)
+    setMsg(null)
+    const ok = await onPrescribe(clientId, {
+      ...form,
+      exercises: form.exercises.filter((ex) => ex.name.trim()),
+    })
+    setSaving(false)
+    if (ok) {
+      setMsg(`Prescribed for ${form.date}.`)
+      setForm(emptyPrescribeForm())
+      setTimeout(() => setMsg(null), 3000)
+    } else {
+      setMsg('Save failed.')
+    }
+  }
+
+  const inputStyle = {
+    fontSize: 12,
+    padding: '7px 9px',
+    background: 'var(--surface)',
+    border: '1px solid var(--card-border)',
+    color: 'var(--foreground)',
+    fontFamily: 'inherit',
+  } as const
+
+  return (
+    <div style={{ background: 'var(--card)', border: '1px solid var(--card-border)', padding: '18px 20px' }}>
+      <div
+        onClick={() => setOpen((o) => !o)}
+        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+      >
+        <div style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: '0.08em' }}>PRESCRIBE UPCOMING WORKOUT</div>
+        <span style={{ fontSize: 11, color: 'var(--accent)' }}>{open ? 'CLOSE' : 'OPEN'}</span>
+      </div>
+
+      {open && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div>
+              <div style={{ fontSize: 9, color: 'var(--muted)', letterSpacing: '0.06em', marginBottom: 4 }}>DATE</div>
+              <input
+                type="date"
+                value={form.date}
+                onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
+                style={{ ...inputStyle, width: '100%' }}
+              />
+            </div>
+            <div>
+              <div style={{ fontSize: 9, color: 'var(--muted)', letterSpacing: '0.06em', marginBottom: 4 }}>PHILOSOPHY</div>
+              <select
+                value={form.philosophy}
+                onChange={(e) => setForm((f) => ({ ...f, philosophy: e.target.value }))}
+                style={{ ...inputStyle, width: '100%' }}
+              >
+                {TRAINING_PHILOSOPHIES.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <input
+              placeholder="Split / day label (e.g. Back & Shoulders)"
+              value={form.splitDay}
+              onChange={(e) => setForm((f) => ({ ...f, splitDay: e.target.value }))}
+              style={inputStyle}
+            />
+            <input
+              placeholder="Phase label (optional)"
+              value={form.phase}
+              onChange={(e) => setForm((f) => ({ ...f, phase: e.target.value }))}
+              style={inputStyle}
+            />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {form.exercises.map((ex, i) => (
+              <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                <input
+                  placeholder="Exercise name"
+                  value={ex.name}
+                  onChange={(e) => updateExercise(i, { name: e.target.value })}
+                  style={{ ...inputStyle, flex: 2, minWidth: 140 }}
+                />
+                <input
+                  placeholder="Target muscle"
+                  value={ex.targetMuscle}
+                  onChange={(e) => updateExercise(i, { targetMuscle: e.target.value })}
+                  style={{ ...inputStyle, flex: 1, minWidth: 100 }}
+                />
+                <input
+                  type="number"
+                  min={1}
+                  placeholder="Sets"
+                  value={ex.setsCount}
+                  onChange={(e) => updateExercise(i, { setsCount: Number(e.target.value) || 1 })}
+                  style={{ ...inputStyle, width: 60 }}
+                />
+                <input
+                  placeholder="Reps (e.g. 8-12)"
+                  value={ex.targetReps}
+                  onChange={(e) => updateExercise(i, { targetReps: e.target.value })}
+                  style={{ ...inputStyle, width: 100 }}
+                />
+                <button
+                  onClick={() => removeExercise(i)}
+                  disabled={form.exercises.length <= 1}
+                  style={{
+                    fontSize: 10,
+                    padding: '7px 10px',
+                    background: 'transparent',
+                    border: '1px solid var(--card-border)',
+                    color: 'var(--muted)',
+                    cursor: form.exercises.length <= 1 ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  REMOVE
+                </button>
+              </div>
+            ))}
+            <button
+              onClick={addExercise}
+              style={{
+                alignSelf: 'flex-start',
+                fontSize: 10,
+                padding: '6px 12px',
+                background: 'transparent',
+                border: '1px solid var(--accent)',
+                color: 'var(--accent)',
+                cursor: 'pointer',
+                letterSpacing: '0.06em',
+              }}
+            >
+              + ADD EXERCISE
+            </button>
+          </div>
+
+          <textarea
+            placeholder="Notes for the client (optional)"
+            value={form.dayNotes}
+            onChange={(e) => setForm((f) => ({ ...f, dayNotes: e.target.value }))}
+            rows={2}
+            style={{ ...inputStyle, resize: 'vertical' }}
+          />
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              style={{
+                fontSize: 11,
+                padding: '8px 18px',
+                background: 'var(--accent)',
+                border: 'none',
+                color: '#fff',
+                cursor: saving ? 'not-allowed' : 'pointer',
+                letterSpacing: '0.06em',
+                opacity: saving ? 0.7 : 1,
+                fontFamily: "'Bebas Neue', impact, sans-serif",
+              }}
+            >
+              {saving ? 'SAVING…' : 'PRESCRIBE'}
+            </button>
+            {msg && (
+              <span style={{ fontSize: 11, color: msg.includes('failed') || msg.includes('Add') ? 'var(--danger)' : 'var(--success)' }}>
+                {msg}
+              </span>
+            )}
           </div>
         </div>
       )}

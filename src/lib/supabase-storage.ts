@@ -169,16 +169,54 @@ export async function syncWorkoutToSupabase(workout: WorkoutDay, weekNumber: num
     date: workout.date,
     week_number: weekNumber,
     philosophy: workout.philosophy,
+    split_day: workout.splitDay,
+    phase: workout.phase,
     exercises: workout.exercises,
     notes: workout.notes || null,
     execution_quality: workout.executionQuality ?? null,
   }
 
+  // coach_edited is deliberately left out of this payload: on conflict, upsert
+  // only touches the columns it's given, so a client's own routine save can
+  // never clear a coach's prescription flag on an existing row.
   const { error } = await getSupabaseClient()
     .from('workout_logs')
     .upsert(row, { onConflict: 'user_id,date' })
 
   if (error) throw error
+}
+
+// A coach-prescribed workout for a date the client hasn't generated locally
+// yet. Only returns a row that was explicitly authored by a coach — never a
+// plain echo of the client's own past sync — so the client-side caller knows
+// it's safe to use in place of algorithmic generation.
+export async function fetchCoachPrescribedWorkout(date: string): Promise<{
+  philosophy: string
+  splitDay: string | null
+  phase: string | null
+  exercises: WorkoutDay['exercises']
+  notes: string | null
+} | null> {
+  const userId = await getUserId()
+  if (!userId) return null
+
+  const { data, error } = await getSupabaseClient()
+    .from('workout_logs')
+    .select('philosophy, split_day, phase, exercises, notes')
+    .eq('user_id', userId)
+    .eq('date', date)
+    .eq('coach_edited', true)
+    .maybeSingle()
+
+  if (error || !data) return null
+
+  return {
+    philosophy: data.philosophy,
+    splitDay: data.split_day,
+    phase: data.phase,
+    exercises: data.exercises ?? [],
+    notes: data.notes,
+  }
 }
 
 // ─── Meal plans ───

@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import type { WorkoutDay, WorkoutExercise, WorkoutSet } from '@/lib/types'
 import { getProfile, saveWorkout, getWorkoutByDate, getWeekDates, getCurrentWeekNumber, getWorkouts } from '@/lib/storage'
+import { fetchCoachPrescribedWorkout } from '@/lib/supabase-storage'
 import HIITSession, { getHIITProtocol } from './HIITSession'
 import { generateWorkout } from '@/lib/workout-generator'
 import { getLastSession, suggestOverload, getPersonalBest, getExerciseHistory, type ExerciseRecord } from '@/lib/exercise-history'
@@ -617,17 +618,35 @@ export default function WorkoutTracker() {
     if (view === 'session' && !workout) setView('week')
   }, [view, workout])
 
-  const handleSelectDay = (date: string, dayNum: number) => {
+  const handleSelectDay = async (date: string, dayNum: number) => {
     const profile = getProfile()
     if (!profile) return
 
     let w = getWorkoutByDate(date)
     if (!w) {
-      const phaseRec = evaluatePhaseProgression(profile, getCheckIns())
-      const isDeload =
-        profile.trainingPhilosophy === 'bompa' &&
-        phaseRec.adjustments.some(a => a.reason.toLowerCase().includes('deload'))
-      w = generateWorkout(profile.trainingPhilosophy, profile.currentPhase, dayNum, date, resolveGeneratorWeek(profile), isDeload, getActiveBlock(profile).cycleNumber) ?? undefined
+      // A coach may have prescribed this day ahead of time — check before
+      // falling back to algorithmic generation. Best-effort: offline or a
+      // failed lookup just falls through to the normal generated workout,
+      // same as always.
+      const prescribed = await fetchCoachPrescribedWorkout(date).catch(() => null)
+      if (prescribed) {
+        w = {
+          id: crypto.randomUUID(),
+          date,
+          phase: prescribed.phase ?? profile.currentPhase,
+          philosophy: prescribed.philosophy as UserProfile['trainingPhilosophy'],
+          splitDay: prescribed.splitDay ?? 'Coach Prescribed',
+          exercises: prescribed.exercises,
+          notes: prescribed.notes ?? '',
+          completed: false,
+        }
+      } else {
+        const phaseRec = evaluatePhaseProgression(profile, getCheckIns())
+        const isDeload =
+          profile.trainingPhilosophy === 'bompa' &&
+          phaseRec.adjustments.some(a => a.reason.toLowerCase().includes('deload'))
+        w = generateWorkout(profile.trainingPhilosophy, profile.currentPhase, dayNum, date, resolveGeneratorWeek(profile), isDeload, getActiveBlock(profile).cycleNumber) ?? undefined
+      }
       if (w) saveWorkout(w)
     }
     if (w) {
