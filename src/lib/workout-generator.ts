@@ -2,6 +2,7 @@ import type { WorkoutDay, WorkoutExercise, WorkoutSet, PhaseConfig, Intensifier,
 import { EXERCISE_DATABASE } from './data/exercises'
 import { getCurrentPhase } from './philosophy-engine'
 import { getTemplateForSplit } from './data/workout-templates'
+import { getY3TWeek } from './block-wave'
 
 // ─── Map split-day names to body parts ───
 
@@ -153,31 +154,6 @@ function assignIntensifier(
   return pool[exerciseIndex % pool.length]
 }
 
-// ─── Y3T sub-week helpers ───
-
-// weekNumber is 1-indexed. Sub-week: 0=Heavy, 1=Moderate, 2=Annihilation
-function getY3TSubWeek(weekNumber: number): 0 | 1 | 2 {
-  return ((weekNumber - 1) % 3) as 0 | 1 | 2
-}
-
-function getY3TRepRange(subWeek: 0 | 1 | 2): [number, number] {
-  if (subWeek === 0) return [6, 10]    // Heavy
-  if (subWeek === 1) return [10, 15]   // Moderate
-  return [15, 40]                       // Annihilation
-}
-
-function getY3TRest(subWeek: 0 | 1 | 2): number {
-  if (subWeek === 0) return 180
-  if (subWeek === 1) return 90
-  return 35 // Annihilation: 30-40s
-}
-
-function getY3TNote(subWeek: 0 | 1 | 2): string {
-  if (subWeek === 0) return 'Y3T WEEK 1 — HEAVY. Compound focus, 6-10 reps, maximum load.'
-  if (subWeek === 1) return 'Y3T WEEK 2 — MODERATE. 10-15 reps, balanced intensity.'
-  return 'Y3T WEEK 3 — ANNIHILATION. Giant sets, 15-40 reps, minimal rest. Extreme pump protocol.'
-}
-
 // ─── Build rep string based on philosophy ───
 
 function buildRepString(repRange: [number, number], philosophy: TrainingPhilosophy, exerciseIndex: number): string {
@@ -238,20 +214,20 @@ export function generateWorkout(
   const template = getTemplateForSplit(philosophy, phaseName, splitDay)
 
   // ─── Y3T sub-week detection ───
-  const y3tSubWeek = philosophy === 'y3t' ? getY3TSubWeek(weekNumber) : -1
-  const isY3TAnnihilation = y3tSubWeek === 2
   const isY3T = philosophy === 'y3t'
+  const y3tWeek = isY3T ? getY3TWeek(weekNumber) : null
+  const isY3TAnnihilation = y3tWeek?.isAnnihilation ?? false
 
   let exercises: WorkoutExercise[]
 
   if (template) {
     exercises = template.exercises.map((ex, idx) => {
       // For Y3T, override rep ranges and rest from template
-      const effectiveRepRange: [number, number] = isY3T
-        ? getY3TRepRange(y3tSubWeek as 0 | 1 | 2)
+      const effectiveRepRange: [number, number] = y3tWeek
+        ? y3tWeek.repRange
         : ex.repRange
-      const effectiveRest = isY3T
-        ? getY3TRest(y3tSubWeek as 0 | 1 | 2)
+      const effectiveRest = y3tWeek
+        ? y3tWeek.restSeconds
         : (ex.restSeconds ?? (ex.category === 'compound' ? style.restSeconds[1] : style.restSeconds[0]))
       // Annihilation: increase sets ~50% and force giant-set intensifier
       const numSets = isY3TAnnihilation ? Math.max(ex.sets, Math.round(ex.sets * 1.5)) : ex.sets
@@ -282,8 +258,8 @@ export function generateWorkout(
 
       // Y3T overrides rep range entirely; otherwise use style with compound/isolation adjustment
       let adjustedReps: [number, number]
-      if (isY3T) {
-        adjustedReps = getY3TRepRange(y3tSubWeek as 0 | 1 | 2)
+      if (y3tWeek) {
+        adjustedReps = y3tWeek.repRange
       } else {
         const repRange = style.repRange as [number, number]
         const dbEx = EXERCISE_DATABASE.find(e => e.id === sel.exerciseId)
@@ -295,8 +271,8 @@ export function generateWorkout(
 
       const dbEx = EXERCISE_DATABASE.find(e => e.id === sel.exerciseId)
       const isCompound = dbEx?.category === 'compound'
-      const effectiveRest = isY3T
-        ? getY3TRest(y3tSubWeek as 0 | 1 | 2)
+      const effectiveRest = y3tWeek
+        ? y3tWeek.restSeconds
         : (isCompound ? style.restSeconds[1] : style.restSeconds[0])
 
       // Annihilation: ~50% more sets
@@ -329,8 +305,8 @@ export function generateWorkout(
 
   const workoutNotes = isDeload
     ? 'DELOAD WEEK — reduced volume'
-    : isY3T
-    ? getY3TNote(y3tSubWeek as 0 | 1 | 2)
+    : y3tWeek
+    ? y3tWeek.note
     : ''
 
   return {

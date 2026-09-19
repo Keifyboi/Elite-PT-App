@@ -1,5 +1,6 @@
 import type { UserProfile, WeeklyCheckIn, MacroTargets, TrainingPhilosophy } from './types'
 import { getPhases, getNextPhase, getCurrentPhase } from './philosophy-engine'
+import { getY3TWeek } from './block-wave'
 
 // ─── Phase switch recommendation ───
 
@@ -238,7 +239,7 @@ function evaluateContestPrep(profile: UserProfile, checkIns: WeeklyCheckIn[]): P
 // ─── Y3T: Fixed 3-week rotation ───
 
 function evaluateY3T(profile: UserProfile): PhaseRecommendation {
-  const weekInCycle = ((profile.weekNumber - 1) % 3) + 1
+  const weekInCycle = getY3TWeek(profile.weekNumber).weekInCycle
   const phases = getPhases('y3t')
   const currentIdx = phases.findIndex(p => p.name === profile.currentPhase)
   const expectedIdx = weekInCycle - 1

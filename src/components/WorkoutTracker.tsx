@@ -9,6 +9,7 @@ import { getLastSession, suggestOverload, getPersonalBest, getExerciseHistory, t
 import { getCurrentPhase } from '@/lib/philosophy-engine'
 import { evaluatePhaseProgression } from '@/lib/phase-progression'
 import { getCheckIns } from '@/lib/storage'
+import { getY3TWeek } from '@/lib/block-wave'
 
 // ─── Progression data helper ───
 
@@ -432,27 +433,15 @@ function WeekSchedule({ onSelectDay }: { onSelectDay: (date: string, dayNum: num
   )
 }
 
-// ─── Y3T sub-week helper (mirrors workout-generator logic) ───
-
-function getY3TSubWeek(weekNumber: number): 0 | 1 | 2 {
-  return ((weekNumber - 1) % 3) as 0 | 1 | 2
-}
-
-const Y3T_LABELS: Record<0 | 1 | 2, { label: string; desc: string; muted: boolean }> = {
-  0: { label: 'Y3T WEEK 1 — HEAVY', desc: '6-10 reps · compound focus', muted: true },
-  1: { label: 'Y3T WEEK 2 — MODERATE', desc: '10-15 reps · balanced intensity', muted: true },
-  2: { label: 'Y3T WEEK 3 — ANNIHILATION', desc: '15-40 reps · giant sets · minimal rest', muted: false },
-}
+// ─── Y3T weekly banner (getY3TWeek is the consolidated logic in lib/block-wave.ts) ───
 
 function Y3TBanner({ weekNumber }: { weekNumber: number }) {
-  const sub = getY3TSubWeek(weekNumber)
-  const info = Y3T_LABELS[sub]
-  const isAnnihilation = sub === 2
+  const week = getY3TWeek(weekNumber)
 
   return (
     <div style={{
-      borderTop: isAnnihilation ? '2px solid var(--accent)' : '1px solid var(--card-border)',
-      background: isAnnihilation ? 'rgba(201,168,76,0.07)' : 'var(--surface)',
+      borderTop: week.isAnnihilation ? '2px solid var(--accent)' : '1px solid var(--card-border)',
+      background: week.isAnnihilation ? 'rgba(201,168,76,0.07)' : 'var(--surface)',
       padding: '8px 12px',
       marginBottom: 4,
     }}>
@@ -460,10 +449,10 @@ function Y3TBanner({ weekNumber }: { weekNumber: number }) {
         fontFamily: 'var(--font-heading), "Bebas Neue", impact, sans-serif',
         fontSize: 14,
         letterSpacing: '0.06em',
-        color: isAnnihilation ? 'var(--accent)' : 'var(--muted)',
+        color: week.isAnnihilation ? 'var(--accent)' : 'var(--muted)',
         lineHeight: 1.2,
-      }}>{info.label}</p>
-      <p style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>{info.desc}</p>
+      }}>{week.label}</p>
+      <p style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>{week.desc}</p>
     </div>
   )
 }
@@ -668,9 +657,6 @@ export default function WorkoutTracker() {
   // Y3T banner data
   const sessionProfile = getProfile()
   const isY3TSession = workout.philosophy === 'y3t'
-  const y3tSubWeekForBanner = isY3TSession && sessionProfile
-    ? getY3TSubWeek(sessionProfile.weekNumber)
-    : null
 
   return (
     <div className="px-4 pt-2 pb-4 space-y-3">
@@ -693,7 +679,7 @@ export default function WorkoutTracker() {
       </div>
 
       {/* Y3T phase banner */}
-      {isY3TSession && y3tSubWeekForBanner !== null && sessionProfile && (
+      {isY3TSession && sessionProfile && (
         <Y3TBanner weekNumber={sessionProfile.weekNumber} />
       )}
 

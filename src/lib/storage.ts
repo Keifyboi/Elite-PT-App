@@ -1,4 +1,4 @@
-import type { UserProfile, WorkoutDay, MealPlan, WeeklyCheckIn, SupplementLog } from './types'
+import type { UserProfile, WorkoutDay, MealPlan, WeeklyCheckIn, SupplementLog, TrainingBlock } from './types'
 import type { HabitLog } from './habits'
 
 export const SCHEMA_VERSION = 2
@@ -9,6 +9,7 @@ const KEYS = {
   meals: 'elitept_meals',
   checkins: 'elitept_checkins',
   habits: 'elitept_habits',
+  trainingBlocks: 'elitept_training_blocks',
 } as const
 
 function get<T>(key: string): T | null {
@@ -167,6 +168,21 @@ export function getCurrentWeekNumber(profile: UserProfile): number {
   today.setHours(12, 0, 0, 0)
   const days = Math.floor((today.getTime() - start.getTime()) / (24 * 60 * 60 * 1000))
   return Math.max(1, Math.floor(days / 7) + 1)
+}
+
+// ─── Training Blocks (bodybuilding program builder) ───
+// Written by the Stage 2 block generator; the plumbing lands now so
+// Stage 3's macrocycle coverage check has history to read.
+export function getTrainingBlockHistory(): TrainingBlock[] {
+  return get<TrainingBlock[]>(KEYS.trainingBlocks) ?? []
+}
+
+export function saveTrainingBlock(block: TrainingBlock): void {
+  const all = getTrainingBlockHistory()
+  const idx = all.findIndex(b => b.id === block.id)
+  if (idx >= 0) all[idx] = block
+  else all.push(block)
+  set(KEYS.trainingBlocks, all)
 }
 
 // ─── Habits ───

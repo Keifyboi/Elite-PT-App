@@ -165,7 +165,10 @@ export interface Exercise {
 export type BodyPart =
   | 'chest'
   | 'back'
+  | 'back-width'
+  | 'back-thickness'
   | 'shoulders'
+  | 'traps'
   | 'biceps'
   | 'triceps'
   | 'quads'
@@ -173,6 +176,49 @@ export type BodyPart =
   | 'glutes'
   | 'calves'
   | 'abs'
+
+// ─── Bodybuilding Program Builder (pose-priority engine) ───
+
+// The 5 philosophies covered by the pose-priority rewrite. A subset of
+// TrainingPhilosophy — HIT/DTP/Bompa/Incredible Bulk/Contest-Prep are
+// untouched and keep using the generic BodyPart/PhaseConfig system above.
+export type BodybuildingPhilosophy = 'y3t' | 'mi40' | 'fst7' | 'phat' | 'corey-g'
+
+// High-leverage areas that appear in 3+ mandatory poses or are chronically
+// underbuilt — tracked individually rather than folded into "back"/"shoulders".
+export type PosePriorityArea =
+  | 'back-width'
+  | 'back-thickness'
+  | 'traps'
+  | 'serratus'
+  | 'hamstring-glute-tie-in'
+  | 'calves'
+
+// A macrocycle stage — distinct from PhaseConfig.name (which is a
+// philosophy-specific label like "Phase 3 (Power/Hypertrophy)"). This is the
+// higher-level stage that decides which philosophy block runs next.
+export type MacrocyclePhase = 'hypertrophy-1' | 'hypertrophy-2' | 'recomposition' | 'prep-and-peak'
+
+export type WaveStage = 'accumulation' | 'intensification' | 'overreach' | 'deload'
+
+export interface WaveWeek {
+  stage: WaveStage
+  volumeMultiplier: number // 1.0 / 0.9 / 1.15 / 0.6
+  repRangeLabel: string    // e.g. "10-12 / 12-15"
+  rir: [number, number]
+}
+
+// A persisted record of one training block, written when a block is
+// generated (Stage 2) and read to check macrocycle pose-priority coverage
+// (Stage 3). Typed now so the storage plumbing can land in Stage 1.
+export interface TrainingBlock {
+  id: string
+  philosophy: BodybuildingPhilosophy
+  macrocyclePhase: MacrocyclePhase
+  cycleCount: number       // number of wave cycles the block ran (Y3T: 3-week cycles; others: 4-week cycles)
+  startDate: string
+  dedicatedPoseAreas: PosePriorityArea[] // pose-priority areas this block was the dedicated block for
+}
 
 // ─── Progress Tracking ───
 export interface WeeklyCheckIn {
