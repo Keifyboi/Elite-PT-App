@@ -54,6 +54,27 @@ export function saveProfile(profile: UserProfile): void {
   set(KEYS.profile, profile)
 }
 
+// Resets training progression to week 1 on a fresh block/phase, anchored to
+// today. Local-only: this device's localStorage is the sole source of truth
+// (Supabase only ever receives a one-way backup sync) — clears logged
+// workouts and training-block history so old dates don't linger against a
+// program that now says "week 1". Leaves check-ins, meals, and habits
+// untouched — those are a separate history, not part of "starting over".
+export function resetTrainingProgress(startingPhaseName: string): void {
+  const profile = getProfile()
+  if (!profile) return
+
+  const today = new Date().toISOString().split('T')[0]
+  saveProfile({
+    ...profile,
+    weekNumber: 1,
+    currentPhase: startingPhaseName,
+    programStartDate: today,
+  })
+  set(KEYS.workouts, [])
+  set(KEYS.trainingBlocks, [])
+}
+
 // ─── Workouts ───
 export function getWorkouts(): WorkoutDay[] {
   return get<WorkoutDay[]>(KEYS.workouts) ?? []

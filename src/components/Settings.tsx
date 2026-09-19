@@ -2,10 +2,11 @@
 
 import { useState, useRef, useEffect } from 'react'
 import type { UserProfile } from '@/lib/types'
-import { getProfile, saveProfile } from '@/lib/storage'
+import { getProfile, saveProfile, resetTrainingProgress } from '@/lib/storage'
 import { calculateMacros, calculateLBM, determineActivityFactor } from '@/lib/nutrition-engine'
 import { downloadBackup, importData } from '@/lib/data-backup'
 import { getSupabaseClient } from '@/lib/supabase'
+import { getPhases } from '@/lib/philosophy-engine'
 
 const HEADING = { fontFamily: 'var(--font-heading), "Bebas Neue", impact, sans-serif', letterSpacing: '0.06em' } as const
 
@@ -55,6 +56,8 @@ export default function Settings({ onClose }: { onClose: () => void }) {
   const [programStart, setProgramStart] = useState('')
   const [saved, setSaved] = useState(false)
   const [importMsg, setImportMsg] = useState('')
+  const [confirmingReset, setConfirmingReset] = useState(false)
+  const [resetDone, setResetDone] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -103,6 +106,17 @@ export default function Settings({ onClose }: { onClose: () => void }) {
     setProfile(updated)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
+  }
+
+  const handleResetProgress = () => {
+    if (!profile) return
+    const startingPhase = getPhases(profile.trainingPhilosophy)[0]?.name ?? profile.currentPhase
+    resetTrainingProgress(startingPhase)
+    setProfile(getProfile())
+    setProgramStart(new Date().toISOString().split('T')[0])
+    setConfirmingReset(false)
+    setResetDone(true)
+    setTimeout(() => setResetDone(false), 2500)
   }
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -279,6 +293,41 @@ export default function Settings({ onClose }: { onClose: () => void }) {
           <p className="text-[9px] pt-1 tracking-wide" style={{ color: 'var(--muted)' }}>
             Export saves all workouts, meals, check-ins, and profile. Import restores from a backup file.
           </p>
+        </div>
+
+        {/* Reset Training Progress */}
+        <div className="mt-4 p-4 space-y-2" style={{ ...card, borderColor: 'var(--danger)' }}>
+          <p style={{ ...HEADING, fontSize: 16, color: 'var(--danger)' }}>RESET TRAINING PROGRESS</p>
+          <p style={{ fontSize: 10, color: 'var(--muted)' }}>
+            Sets week number back to 1 on a fresh block starting today, and clears logged workouts and block history. Check-ins, meals, and habits are not affected.
+          </p>
+          {!confirmingReset ? (
+            <button
+              onClick={() => setConfirmingReset(true)}
+              className="w-full py-2.5 transition-colors"
+              style={{ border: '1px solid var(--danger)', color: 'var(--danger)', background: 'transparent', fontFamily: 'var(--font-heading), "Bebas Neue", impact, sans-serif', fontSize: 14, letterSpacing: '0.08em' }}
+            >
+              RESET TO WEEK 1
+            </button>
+          ) : (
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConfirmingReset(false)}
+                className="flex-1 py-2.5 transition-colors"
+                style={{ border: '1px solid var(--card-border)', color: 'var(--foreground)', background: 'var(--surface)', fontFamily: 'var(--font-heading), "Bebas Neue", impact, sans-serif', fontSize: 13, letterSpacing: '0.06em' }}
+              >
+                CANCEL
+              </button>
+              <button
+                onClick={handleResetProgress}
+                className="flex-1 py-2.5 transition-colors"
+                style={{ border: 'none', color: '#000', background: 'var(--danger)', fontFamily: 'var(--font-heading), "Bebas Neue", impact, sans-serif', fontSize: 13, letterSpacing: '0.06em' }}
+              >
+                CONFIRM RESET
+              </button>
+            </div>
+          )}
+          {resetDone && <p className="text-xs" style={{ color: 'var(--success)' }}>Reset — you&apos;re on week 1 ✓</p>}
         </div>
 
         {/* Sign Out */}
