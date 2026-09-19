@@ -623,15 +623,22 @@ export default function WorkoutTracker() {
     if (!profile) return
 
     let w = getWorkoutByDate(date)
-    if (!w) {
-      // A coach may have prescribed this day ahead of time — check before
-      // falling back to algorithmic generation. Best-effort: offline or a
-      // failed lookup just falls through to the normal generated workout,
-      // same as always.
+    // Once any set has an actual rep/weight logged, or the session is marked
+    // done, it's the client's real history — a coach edit must never silently
+    // overwrite that. Only an untouched (still-algorithmic-defaults) session
+    // is safe to refresh from a coach's version.
+    const hasLoggedProgress = (wd: WorkoutDay) =>
+      wd.exercises.some(ex => ex.sets.some(s => s.actualReps != null || s.weight != null))
+    const refreshable = !w || (!w.completed && !hasLoggedProgress(w))
+
+    if (refreshable) {
+      // A coach may have prescribed or edited this day — check before falling
+      // back to (or keeping) the algorithmically generated version. Best-effort:
+      // offline or a failed lookup just falls through to what's already there.
       const prescribed = await fetchCoachPrescribedWorkout(date).catch(() => null)
       if (prescribed) {
-        w = {
-          id: crypto.randomUUID(),
+        const next: WorkoutDay = {
+          id: w?.id ?? crypto.randomUUID(),
           date,
           phase: prescribed.phase ?? profile.currentPhase,
           philosophy: prescribed.philosophy as UserProfile['trainingPhilosophy'],
@@ -640,14 +647,19 @@ export default function WorkoutTracker() {
           notes: prescribed.notes ?? '',
           completed: false,
         }
-      } else {
+        const changed = !w || JSON.stringify(w.exercises) !== JSON.stringify(next.exercises) || w.splitDay !== next.splitDay
+        if (changed) {
+          w = next
+          saveWorkout(w)
+        }
+      } else if (!w) {
         const phaseRec = evaluatePhaseProgression(profile, getCheckIns())
         const isDeload =
           profile.trainingPhilosophy === 'bompa' &&
           phaseRec.adjustments.some(a => a.reason.toLowerCase().includes('deload'))
         w = generateWorkout(profile.trainingPhilosophy, profile.currentPhase, dayNum, date, resolveGeneratorWeek(profile), isDeload, getActiveBlock(profile).cycleNumber) ?? undefined
+        if (w) saveWorkout(w)
       }
-      if (w) saveWorkout(w)
     }
     if (w) {
       setWorkout(w)

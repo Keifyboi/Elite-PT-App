@@ -1370,6 +1370,50 @@ function PrescribeWorkoutPanel({
   const [form, setForm] = useState<PrescribeForm>(emptyPrescribeForm)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
+  const [loadedExisting, setLoadedExisting] = useState(false)
+
+  // Editing a date that already has a workout (prescribed or client-generated)
+  // should start from what's actually there, not overwrite it blind.
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    setLoadedExisting(false)
+
+    async function loadExisting() {
+      const { data } = await getSupabaseClient()
+        .from('workout_logs')
+        .select('philosophy, split_day, phase, exercises, notes')
+        .eq('user_id', clientId)
+        .eq('date', form.date)
+        .maybeSingle()
+
+      if (cancelled) return
+      setLoadedExisting(true)
+      if (!data) return
+
+      const existingExercises = (data.exercises as WorkoutExerciseRow[] | null) ?? []
+      setForm((f) => ({
+        ...f,
+        philosophy: data.philosophy ?? f.philosophy,
+        splitDay: data.split_day ?? '',
+        phase: data.phase ?? '',
+        dayNotes: data.notes ?? '',
+        exercises: existingExercises.length > 0
+          ? existingExercises.map((ex) => ({
+              name: ex.name ?? '',
+              targetMuscle: ex.targetMuscle ?? '',
+              setsCount: ex.sets?.length || 3,
+              targetReps: ex.sets?.[0]?.targetReps ?? '8-12',
+              notes: ex.notes ?? '',
+            }))
+          : f.exercises,
+      }))
+    }
+
+    loadExisting()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, form.date, clientId])
 
   const updateExercise = (i: number, patch: Partial<PrescribeExerciseForm>) => {
     setForm((f) => ({
@@ -1425,7 +1469,9 @@ function PrescribeWorkoutPanel({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 16 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div>
-              <div style={{ fontSize: 9, color: 'var(--muted)', letterSpacing: '0.06em', marginBottom: 4 }}>DATE</div>
+              <div style={{ fontSize: 9, color: 'var(--muted)', letterSpacing: '0.06em', marginBottom: 4 }}>
+                DATE {!loadedExisting && <span style={{ color: 'var(--accent)' }}>· checking existing…</span>}
+              </div>
               <input
                 type="date"
                 value={form.date}
