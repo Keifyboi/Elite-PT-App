@@ -63,10 +63,10 @@ export const IB_RESET_TEMPLATES: Record<string, WorkoutTemplate> = {
   'Back & Biceps': {
     splitDay: 'Back & Biceps',
     exercises: [
-      { name: 'Wide-Grip Lat Pulldowns', bodyPart: 'back', category: 'cable', sets: 3, repRange: [10, 12], tempo: '3-0-1-2', restSeconds: 45, notes: 'Depress shoulder blades, squeeze lats' },
+      { name: 'Wide-Grip Lat Pulldowns', bodyPart: 'back-width', category: 'cable', sets: 3, repRange: [10, 12], tempo: '3-0-1-2', restSeconds: 45, notes: 'Depress shoulder blades, squeeze lats' },
       { name: 'Dumbbell Preacher Curls', bodyPart: 'biceps', category: 'isolation', sets: 3, repRange: [10, 12], tempo: '3-0-1-2', restSeconds: 45 },
-      { name: 'Seated Cable Rows (1½ reps)', bodyPart: 'back', category: 'cable', sets: 4, repRange: [10, 12], tempo: '3-0-2-0', restSeconds: 10, intensifier: '1.5-reps' },
-      { name: 'Standing Cable Pullovers', bodyPart: 'back', category: 'cable', sets: 4, repRange: [10, 12], tempo: '3-0-1-0', restSeconds: 60, intensifier: 'nos' },
+      { name: 'Seated Cable Rows (1½ reps)', bodyPart: 'back-thickness', category: 'cable', sets: 4, repRange: [10, 12], tempo: '3-0-2-0', restSeconds: 10, intensifier: '1.5-reps' },
+      { name: 'Standing Cable Pullovers', bodyPart: 'back-width', category: 'cable', sets: 4, repRange: [10, 12], tempo: '3-0-1-0', restSeconds: 60, intensifier: 'nos' },
       { name: 'Standing Alternating Dumbbell Curls', bodyPart: 'biceps', category: 'isolation', sets: 3, repRange: [10, 12], tempo: '3-1-1-1', restSeconds: 10 },
       { name: 'Incline Dumbbell Curls', bodyPart: 'biceps', category: 'isolation', sets: 3, repRange: [10, 12], tempo: '3-1-1-0', restSeconds: 60, intensifier: 'nos-x' },
     ],
@@ -100,7 +100,7 @@ export const IB_RESET_TEMPLATES: Record<string, WorkoutTemplate> = {
     splitDay: 'Shoulders, Calves & Abs',
     exercises: [
       { name: 'Cable Lateral Raises', bodyPart: 'shoulders', category: 'cable', sets: 4, repRange: [10, 12], tempo: '3-0-1-2', restSeconds: 15, intensifier: 'nos' },
-      { name: 'Low Pulley Shrugs', bodyPart: 'shoulders', category: 'cable', sets: 6, repRange: [6, 8], tempo: '2-1-1-2', restSeconds: 60 },
+      { name: 'Low Pulley Shrugs', bodyPart: 'traps', category: 'cable', sets: 6, repRange: [6, 8], tempo: '2-1-1-2', restSeconds: 60 },
       { name: 'Prone Incline Dumbbell Lateral Raises', bodyPart: 'shoulders', category: 'isolation', sets: 4, repRange: [10, 12], tempo: '3-0-1-0', restSeconds: 10, intensifier: 'nos' },
       { name: 'Seated Rows (Wide Overhand, Rear Delt Focus)', bodyPart: 'shoulders', category: 'cable', sets: 4, repRange: [10, 12], tempo: '3-0-1-2', restSeconds: 60, intensifier: 'nos-x' },
       { name: 'Reverse Pec Deck', bodyPart: 'shoulders', category: 'machine', sets: 3, repRange: [10, 12], tempo: '3-0-1-0', restSeconds: 10 },
@@ -118,11 +118,11 @@ export const IB_GROWTH_TEMPLATES: Record<string, WorkoutTemplate> = {
   'Back & Biceps': {
     splitDay: 'Back & Biceps',
     exercises: [
-      { name: 'Bent-Over Dumbbell Rows', bodyPart: 'back', category: 'compound', sets: 6, repRange: [6, 8], tempo: '4-0-1-2', restSeconds: 90 },
-      { name: 'Seated Cable Rows (Elevated Seat)', bodyPart: 'back', category: 'cable', sets: 6, repRange: [6, 8], tempo: '3-0-1-2', restSeconds: 75 },
-      { name: 'Cable Pullovers (Bent Over)', bodyPart: 'back', category: 'cable', sets: 4, repRange: [10, 12], tempo: '3-1-1-0', restSeconds: 60 },
+      { name: 'Bent-Over Dumbbell Rows', bodyPart: 'back-thickness', category: 'compound', sets: 6, repRange: [6, 8], tempo: '4-0-1-2', restSeconds: 90 },
+      { name: 'Seated Cable Rows (Elevated Seat)', bodyPart: 'back-thickness', category: 'cable', sets: 6, repRange: [6, 8], tempo: '3-0-1-2', restSeconds: 75 },
+      { name: 'Cable Pullovers (Bent Over)', bodyPart: 'back-width', category: 'cable', sets: 4, repRange: [10, 12], tempo: '3-1-1-0', restSeconds: 60 },
       { name: 'Incline Dumbbell Curls (Supinated)', bodyPart: 'biceps', category: 'isolation', sets: 4, repRange: [8, 10], tempo: '4-1-1-0', restSeconds: 60 },
-      { name: 'Supinated Lat Pulldowns', bodyPart: 'back', category: 'cable', sets: 4, repRange: [10, 12], tempo: '3-0-1-1', restSeconds: 75 },
+      { name: 'Supinated Lat Pulldowns', bodyPart: 'back-width', category: 'cable', sets: 4, repRange: [10, 12], tempo: '3-0-1-1', restSeconds: 75 },
       { name: 'Seated Dumbbell Curls (Supinating)', bodyPart: 'biceps', category: 'isolation', sets: 4, repRange: [8, 10], tempo: '3-0-1-1', restSeconds: 60 },
     ],
   },
@@ -152,8 +152,9 @@ export const IB_GROWTH_TEMPLATES: Record<string, WorkoutTemplate> = {
     splitDay: 'Upper Back & Shoulders',
     exercises: [
       { name: 'Seated Dumbbell Shoulder Press (Neutral Grip)', bodyPart: 'shoulders', category: 'compound', sets: 6, repRange: [10, 12], tempo: '3-0-1-2', restSeconds: 60 },
-      { name: 'Pull-Ups (Neutral Grip)', bodyPart: 'back', category: 'compound', sets: 6, repRange: [8, 10], tempo: '3-0-1-2', restSeconds: 60 },
-      { name: 'Dumbbell Rows', bodyPart: 'back', category: 'compound', sets: 6, repRange: [6, 8], tempo: '4-0-1-1', restSeconds: 90 },
+      { name: 'Pull-Ups (Neutral Grip)', bodyPart: 'back-width', category: 'compound', sets: 6, repRange: [8, 10], tempo: '3-0-1-2', restSeconds: 60 },
+      { name: 'Dumbbell Rows', bodyPart: 'back-thickness', category: 'compound', sets: 6, repRange: [6, 8], tempo: '4-0-1-1', restSeconds: 90 },
+      { name: 'Barbell Shrugs', bodyPart: 'traps', category: 'compound', sets: 4, repRange: [10, 12], tempo: '2-1-1-0', restSeconds: 60 },
       { name: 'Cable Lateral Raises', bodyPart: 'shoulders', category: 'cable', sets: 4, repRange: [10, 12], tempo: '3-0-1-0', restSeconds: 45 },
       { name: 'Dumbbell Lateral Raises (Seated)', bodyPart: 'shoulders', category: 'isolation', sets: 4, repRange: [10, 12], tempo: '3-0-1-0', restSeconds: 45 },
       { name: 'Prone Incline Dumbbell Rear Delt Raises', bodyPart: 'shoulders', category: 'isolation', sets: 4, repRange: [10, 12], tempo: '3-0-1-1', restSeconds: 45 },
@@ -223,8 +224,8 @@ export const DTP_TEMPLATES: Record<string, WorkoutTemplate> = {
   'Back': {
     splitDay: 'Back',
     exercises: [
-      { name: 'Bent-Over Barbell Rows', bodyPart: 'back', category: 'compound', sets: 12, repRange: [5, 50], restSeconds: 45, intensifier: 'rest-pause', notes: 'DTP PYRAMID: 50→40→30→20→10→5→5→10→20→30→40→50. Rest 45s high reps, 240s heavy.' },
-      { name: 'Straight-Arm Lat Pulldowns', bodyPart: 'back', category: 'cable', sets: 3, repRange: [12, 15], restSeconds: 30, intensifier: 'drop-set', notes: 'Finisher: 3 drop sets' },
+      { name: 'Bent-Over Barbell Rows', bodyPart: 'back-thickness', category: 'compound', sets: 12, repRange: [5, 50], restSeconds: 45, intensifier: 'rest-pause', notes: 'DTP PYRAMID: 50→40→30→20→10→5→5→10→20→30→40→50. Rest 45s high reps, 240s heavy.' },
+      { name: 'Straight-Arm Lat Pulldowns', bodyPart: 'back-width', category: 'cable', sets: 3, repRange: [12, 15], restSeconds: 30, intensifier: 'drop-set', notes: 'Finisher: 3 drop sets' },
     ],
   },
   'Shoulders': {
@@ -232,6 +233,7 @@ export const DTP_TEMPLATES: Record<string, WorkoutTemplate> = {
     exercises: [
       { name: 'Seated Overhead Press', bodyPart: 'shoulders', category: 'compound', sets: 12, repRange: [5, 50], restSeconds: 45, intensifier: 'rest-pause', notes: 'DTP PYRAMID: 50→40→30→20→10→5→5→10→20→30→40→50. Rest 45s high reps, 240s heavy.' },
       { name: 'Dumbbell Lateral Raises', bodyPart: 'shoulders', category: 'isolation', sets: 3, repRange: [12, 15], restSeconds: 30, intensifier: 'drop-set', notes: 'Finisher: 3 drop sets' },
+      { name: 'Barbell Shrugs', bodyPart: 'traps', category: 'compound', sets: 4, repRange: [10, 12], restSeconds: 45, notes: 'Traps get dedicated volume — never leftover sets after delts' },
     ],
   },
   'Legs': {
@@ -468,11 +470,11 @@ export const HIT_TEMPLATES: Record<string, WorkoutTemplate> = {
   'Back': {
     splitDay: 'Back',
     exercises: [
-      { name: 'Machine Lat Pulldowns (Warm-Up)', bodyPart: 'back', category: 'machine', sets: 2, repRange: [12, 12], restSeconds: 90, notes: 'Warm-up sets' },
-      { name: 'Machine Lat Pulldowns', bodyPart: 'back', category: 'machine', sets: 1, repRange: [6, 8], restSeconds: 240, intensifier: 'forced-reps', notes: 'WORKING SET — failure + 2 forced reps + 1 slow negative' },
-      { name: 'Barbell Rows (Underhand)', bodyPart: 'back', category: 'compound', sets: 1, repRange: [6, 8], restSeconds: 180, intensifier: 'forced-reps', notes: 'WORKING SET — absolute failure' },
-      { name: 'Single-Arm Dumbbell Rows', bodyPart: 'back', category: 'compound', sets: 1, repRange: [6, 8], restSeconds: 180, notes: 'WORKING SET — absolute failure' },
-      { name: 'Machine Seated Rows', bodyPart: 'back', category: 'machine', sets: 1, repRange: [6, 8], restSeconds: 180, intensifier: 'forced-reps', notes: 'WORKING SET — failure + 2 forced reps' },
+      { name: 'Machine Lat Pulldowns (Warm-Up)', bodyPart: 'back-width', category: 'machine', sets: 2, repRange: [12, 12], restSeconds: 90, notes: 'Warm-up sets' },
+      { name: 'Machine Lat Pulldowns', bodyPart: 'back-width', category: 'machine', sets: 1, repRange: [6, 8], restSeconds: 240, intensifier: 'forced-reps', notes: 'WORKING SET — failure + 2 forced reps + 1 slow negative' },
+      { name: 'Barbell Rows (Underhand)', bodyPart: 'back-thickness', category: 'compound', sets: 1, repRange: [6, 8], restSeconds: 180, intensifier: 'forced-reps', notes: 'WORKING SET — absolute failure' },
+      { name: 'Single-Arm Dumbbell Rows', bodyPart: 'back-thickness', category: 'compound', sets: 1, repRange: [6, 8], restSeconds: 180, notes: 'WORKING SET — absolute failure' },
+      { name: 'Machine Seated Rows', bodyPart: 'back-thickness', category: 'machine', sets: 1, repRange: [6, 8], restSeconds: 180, intensifier: 'forced-reps', notes: 'WORKING SET — failure + 2 forced reps' },
       { name: 'Barbell Deadlifts (Warm-Up)', bodyPart: 'back', category: 'compound', sets: 2, repRange: [10, 10], restSeconds: 120, notes: 'Warm-up sets' },
       { name: 'Barbell Deadlifts', bodyPart: 'back', category: 'compound', sets: 1, repRange: [8, 8], restSeconds: 300, intensifier: 'rest-pause', notes: 'WORKING SET — failure, rack 15s, squeeze out 1-2 more' },
     ],
@@ -485,7 +487,7 @@ export const HIT_TEMPLATES: Record<string, WorkoutTemplate> = {
       { name: 'Dumbbell Lateral Raises', bodyPart: 'shoulders', category: 'isolation', sets: 1, repRange: [8, 10], restSeconds: 120, intensifier: 'forced-reps', notes: 'WORKING SET — failure + partial reps' },
       { name: 'Bent-Over Rear Delt Raises', bodyPart: 'shoulders', category: 'isolation', sets: 1, repRange: [8, 10], restSeconds: 120, intensifier: 'forced-reps', notes: 'WORKING SET — failure' },
       { name: 'Cable Lateral Raises', bodyPart: 'shoulders', category: 'cable', sets: 1, repRange: [8, 10], restSeconds: 120, intensifier: 'negative-overload', notes: 'WORKING SET — slow negatives to failure' },
-      { name: 'Barbell Shrugs', bodyPart: 'shoulders', category: 'compound', sets: 1, repRange: [6, 8], restSeconds: 120, intensifier: 'rest-pause', notes: 'WORKING SET — failure, hold at top 2s each rep' },
+      { name: 'Barbell Shrugs', bodyPart: 'traps', category: 'compound', sets: 1, repRange: [6, 8], restSeconds: 120, intensifier: 'rest-pause', notes: 'WORKING SET — failure, hold at top 2s each rep' },
     ],
   },
   'Legs': {
@@ -589,14 +591,15 @@ export const BOMPA_AA_TEMPLATES: Record<string, WorkoutTemplate> = {
     { name: 'Push-Ups', bodyPart: 'chest', category: 'bodyweight', sets: 2, repRange: [12, 15], restSeconds: 60 },
   ]},
   'Back': { splitDay: 'Back', exercises: [
-    { name: 'Lat Pulldowns', bodyPart: 'back', category: 'cable', sets: 3, repRange: [12, 15], restSeconds: 60, notes: '40-60% 1RM — tendon/ligament prep' },
-    { name: 'Dumbbell Rows', bodyPart: 'back', category: 'compound', sets: 3, repRange: [12, 15], restSeconds: 60 },
-    { name: 'Seated Cable Rows', bodyPart: 'back', category: 'cable', sets: 2, repRange: [12, 15], restSeconds: 60 },
-    { name: 'Straight-Arm Pulldowns', bodyPart: 'back', category: 'cable', sets: 2, repRange: [12, 15], restSeconds: 60 },
+    { name: 'Lat Pulldowns', bodyPart: 'back-width', category: 'cable', sets: 3, repRange: [12, 15], restSeconds: 60, notes: '40-60% 1RM — tendon/ligament prep' },
+    { name: 'Dumbbell Rows', bodyPart: 'back-thickness', category: 'compound', sets: 3, repRange: [12, 15], restSeconds: 60 },
+    { name: 'Seated Cable Rows', bodyPart: 'back-thickness', category: 'cable', sets: 2, repRange: [12, 15], restSeconds: 60 },
+    { name: 'Straight-Arm Pulldowns', bodyPart: 'back-width', category: 'cable', sets: 2, repRange: [12, 15], restSeconds: 60 },
   ]},
   'Shoulders': { splitDay: 'Shoulders', exercises: [
     { name: 'Seated Dumbbell Press', bodyPart: 'shoulders', category: 'compound', sets: 3, repRange: [12, 15], restSeconds: 60, notes: '40-60% 1RM' },
     { name: 'Dumbbell Lateral Raises', bodyPart: 'shoulders', category: 'isolation', sets: 3, repRange: [12, 15], restSeconds: 60 },
+    { name: 'Barbell Shrugs', bodyPart: 'traps', category: 'compound', sets: 2, repRange: [12, 15], restSeconds: 60, notes: '40-60% 1RM — tendon/ligament prep' },
     { name: 'Bent-Over Rear Delt Raises', bodyPart: 'shoulders', category: 'isolation', sets: 2, repRange: [12, 15], restSeconds: 60 },
     { name: 'Face Pulls', bodyPart: 'shoulders', category: 'cable', sets: 2, repRange: [12, 15], restSeconds: 60 },
   ]},
@@ -629,10 +632,10 @@ export const BOMPA_HYPERTROPHY_TEMPLATES: Record<string, WorkoutTemplate> = {
   'Back': {
     splitDay: 'Back',
     exercises: [
-      { name: 'Barbell Rows', bodyPart: 'back', category: 'compound', sets: 4, repRange: [6, 10], restSeconds: 90 },
-      { name: 'Pull-Ups', bodyPart: 'back', category: 'bodyweight', sets: 4, repRange: [8, 12], restSeconds: 90 },
-      { name: 'Seated Cable Rows', bodyPart: 'back', category: 'cable', sets: 3, repRange: [10, 12], restSeconds: 60 },
-      { name: 'Straight-Arm Pulldowns', bodyPart: 'back', category: 'cable', sets: 3, repRange: [10, 12], restSeconds: 60 },
+      { name: 'Barbell Rows', bodyPart: 'back-thickness', category: 'compound', sets: 4, repRange: [6, 10], restSeconds: 90 },
+      { name: 'Pull-Ups', bodyPart: 'back-width', category: 'bodyweight', sets: 4, repRange: [8, 12], restSeconds: 90 },
+      { name: 'Seated Cable Rows', bodyPart: 'back-thickness', category: 'cable', sets: 3, repRange: [10, 12], restSeconds: 60 },
+      { name: 'Straight-Arm Pulldowns', bodyPart: 'back-width', category: 'cable', sets: 3, repRange: [10, 12], restSeconds: 60 },
     ],
   },
   'Shoulders': {
@@ -640,6 +643,7 @@ export const BOMPA_HYPERTROPHY_TEMPLATES: Record<string, WorkoutTemplate> = {
     exercises: [
       { name: 'Standing Barbell Press', bodyPart: 'shoulders', category: 'compound', sets: 4, repRange: [6, 10], restSeconds: 90 },
       { name: 'Dumbbell Lateral Raises', bodyPart: 'shoulders', category: 'isolation', sets: 3, repRange: [10, 12], restSeconds: 60 },
+      { name: 'Barbell Shrugs', bodyPart: 'traps', category: 'compound', sets: 3, repRange: [10, 12], restSeconds: 60 },
       { name: 'Bent-Over Rear Raises', bodyPart: 'shoulders', category: 'isolation', sets: 3, repRange: [10, 12], restSeconds: 60 },
       { name: 'Face Pulls', bodyPart: 'shoulders', category: 'cable', sets: 3, repRange: [10, 12], restSeconds: 60 },
     ],
@@ -675,8 +679,8 @@ export const BOMPA_MAXSTRENGTH_TEMPLATES: Record<string, WorkoutTemplate> = {
   ]},
   'Back': { splitDay: 'Back', exercises: [
     { name: 'Barbell Deadlifts', bodyPart: 'back', category: 'compound', sets: 5, repRange: [1, 5], restSeconds: 300, notes: '85-100% 1RM' },
-    { name: 'Weighted Pull-Ups', bodyPart: 'back', category: 'compound', sets: 5, repRange: [3, 5], restSeconds: 300 },
-    { name: 'Barbell Rows', bodyPart: 'back', category: 'compound', sets: 4, repRange: [3, 5], restSeconds: 240 },
+    { name: 'Weighted Pull-Ups', bodyPart: 'back-width', category: 'compound', sets: 5, repRange: [3, 5], restSeconds: 300 },
+    { name: 'Barbell Rows', bodyPart: 'back-thickness', category: 'compound', sets: 4, repRange: [3, 5], restSeconds: 240 },
   ]},
   'Legs': { splitDay: 'Legs', exercises: [
     { name: 'Barbell Back Squats', bodyPart: 'quads', category: 'compound', sets: 5, repRange: [1, 5], restSeconds: 300, notes: '85-100% 1RM' },
@@ -687,7 +691,7 @@ export const BOMPA_MAXSTRENGTH_TEMPLATES: Record<string, WorkoutTemplate> = {
   'Shoulders': { splitDay: 'Shoulders', exercises: [
     { name: 'Standing Barbell Press', bodyPart: 'shoulders', category: 'compound', sets: 5, repRange: [3, 5], restSeconds: 300, notes: '85-100% 1RM' },
     { name: 'Push Press', bodyPart: 'shoulders', category: 'compound', sets: 4, repRange: [3, 5], restSeconds: 240 },
-    { name: 'Barbell Upright Rows', bodyPart: 'shoulders', category: 'compound', sets: 3, repRange: [5, 5], restSeconds: 180 },
+    { name: 'Barbell Upright Rows', bodyPart: 'traps', category: 'compound', sets: 3, repRange: [5, 5], restSeconds: 180 },
   ]},
   'Arms': { splitDay: 'Arms', exercises: [
     { name: 'Close-Grip Bench Press', bodyPart: 'triceps', category: 'compound', sets: 4, repRange: [3, 5], restSeconds: 240, notes: '85-100% 1RM' },
@@ -717,8 +721,8 @@ export const BOMPA_POWER_TEMPLATES: Record<string, WorkoutTemplate> = {
   ]},
   'Back': { splitDay: 'Back', exercises: [
     { name: 'Power Cleans', bodyPart: 'back', category: 'compound', sets: 5, repRange: [3, 3], restSeconds: 180, notes: 'Explosive' },
-    { name: 'Barbell Rows (Explosive)', bodyPart: 'back', category: 'compound', sets: 4, repRange: [5, 5], restSeconds: 120 },
-    { name: 'Weighted Pull-Ups', bodyPart: 'back', category: 'compound', sets: 4, repRange: [3, 5], restSeconds: 180 },
+    { name: 'Barbell Rows (Explosive)', bodyPart: 'back-thickness', category: 'compound', sets: 4, repRange: [5, 5], restSeconds: 120 },
+    { name: 'Weighted Pull-Ups', bodyPart: 'back-width', category: 'compound', sets: 4, repRange: [3, 5], restSeconds: 180 },
   ]},
   'Legs': { splitDay: 'Legs', exercises: [
     { name: 'Box Jumps', bodyPart: 'quads', category: 'bodyweight', sets: 5, repRange: [3, 3], restSeconds: 180 },
@@ -813,9 +817,9 @@ export const CONTEST_PREP_TEMPLATES: Record<string, WorkoutTemplate> = {
     splitDay: 'Upper Body Power',
     exercises: [
       { name: 'Barbell Bench Press', bodyPart: 'chest', category: 'compound', sets: 3, repRange: [3, 5], restSeconds: 300, notes: 'RPE 8 — do not train to failure except final set' },
-      { name: 'Weighted Pull-Ups', bodyPart: 'back', category: 'compound', sets: 3, repRange: [3, 5], restSeconds: 300, notes: 'RPE 8' },
+      { name: 'Weighted Pull-Ups', bodyPart: 'back-width', category: 'compound', sets: 3, repRange: [3, 5], restSeconds: 300, notes: 'RPE 8' },
       { name: 'Seated Dumbbell Press', bodyPart: 'shoulders', category: 'compound', sets: 3, repRange: [5, 8], restSeconds: 180, notes: 'RPE 8' },
-      { name: 'Barbell Rows', bodyPart: 'back', category: 'compound', sets: 3, repRange: [3, 5], restSeconds: 300, notes: 'RPE 8' },
+      { name: 'Barbell Rows', bodyPart: 'back-thickness', category: 'compound', sets: 3, repRange: [3, 5], restSeconds: 300, notes: 'RPE 8' },
       { name: 'Weighted Dips', bodyPart: 'triceps', category: 'bodyweight', sets: 2, repRange: [6, 8], restSeconds: 180, notes: 'RPE 8' },
       { name: 'Barbell Curls', bodyPart: 'biceps', category: 'compound', sets: 2, repRange: [6, 8], restSeconds: 120, notes: 'RPE 8' },
     ],
@@ -834,11 +838,12 @@ export const CONTEST_PREP_TEMPLATES: Record<string, WorkoutTemplate> = {
   'Back & Shoulders Hypertrophy': {
     splitDay: 'Back & Shoulders Hypertrophy',
     exercises: [
-      { name: 'Bent-Over Rows (Speed Work)', bodyPart: 'back', category: 'compound', sets: 6, repRange: [3, 3], restSeconds: 90, intensifier: 'speed-work', notes: '65-70% 1RM, maximum bar velocity. RPE 8.' },
-      { name: 'Seated Cable Rows', bodyPart: 'back', category: 'cable', sets: 3, repRange: [8, 12], restSeconds: 90, notes: 'RPE 8' },
-      { name: 'Lat Pulldowns', bodyPart: 'back', category: 'cable', sets: 3, repRange: [8, 12], restSeconds: 90, notes: 'RPE 8' },
-      { name: 'Dumbbell Rows', bodyPart: 'back', category: 'compound', sets: 2, repRange: [10, 12], restSeconds: 60, notes: 'RPE 8' },
+      { name: 'Bent-Over Rows (Speed Work)', bodyPart: 'back-thickness', category: 'compound', sets: 6, repRange: [3, 3], restSeconds: 90, intensifier: 'speed-work', notes: '65-70% 1RM, maximum bar velocity. RPE 8.' },
+      { name: 'Seated Cable Rows', bodyPart: 'back-thickness', category: 'cable', sets: 3, repRange: [8, 12], restSeconds: 90, notes: 'RPE 8' },
+      { name: 'Lat Pulldowns', bodyPart: 'back-width', category: 'cable', sets: 3, repRange: [8, 12], restSeconds: 90, notes: 'RPE 8' },
+      { name: 'Straight-Arm Pulldowns', bodyPart: 'back-width', category: 'cable', sets: 2, repRange: [10, 12], restSeconds: 60, notes: 'RPE 8 — width finisher, balances the day\'s row volume' },
       { name: 'Seated Dumbbell Press', bodyPart: 'shoulders', category: 'compound', sets: 3, repRange: [8, 12], restSeconds: 90, notes: 'RPE 8' },
+      { name: 'Barbell Shrugs', bodyPart: 'traps', category: 'compound', sets: 3, repRange: [10, 12], restSeconds: 60, notes: 'RPE 8 — dedicated trap volume' },
       { name: 'Dumbbell Lateral Raises', bodyPart: 'shoulders', category: 'isolation', sets: 3, repRange: [12, 15], restSeconds: 60, notes: 'RPE 8' },
       { name: 'Cable Rear Delt Flyes', bodyPart: 'shoulders', category: 'cable', sets: 3, repRange: [12, 15], restSeconds: 60, notes: 'RPE 8' },
     ],

@@ -25,10 +25,15 @@ const BODYBUILDING_DAY_BODYPARTS: Record<string, BodyPart[]> = {
 
 // ─── Map split-day names to body parts ───
 
+// 'back' and 'shoulders' resolve to the granular pose-priority values
+// (back-width/back-thickness, shoulders+traps) rather than the generic
+// buckets — this is the same anatomical-correctness rule the pose-priority
+// philosophies use, applied to every philosophy's fallback selection so
+// traps/width/thickness are never silently dropped, regardless of technique.
 const SPLIT_TO_BODYPARTS: Record<string, BodyPart[]> = {
   'chest': ['chest'],
-  'back': ['back'],
-  'shoulders': ['shoulders'],
+  'back': ['back-width', 'back-thickness'],
+  'shoulders': ['shoulders', 'traps'],
   'arms': ['biceps', 'triceps'],
   'biceps': ['biceps'],
   'triceps': ['triceps'],
@@ -38,12 +43,12 @@ const SPLIT_TO_BODYPARTS: Record<string, BodyPart[]> = {
   'glutes': ['glutes'],
   'calves': ['calves'],
   'abs': ['abs'],
-  'upper body': ['chest', 'back', 'shoulders'],
+  'upper body': ['chest', 'back-width', 'back-thickness', 'shoulders', 'traps'],
   'lower body': ['quads', 'hamstrings', 'glutes', 'calves'],
-  'upper': ['chest', 'back', 'shoulders', 'biceps', 'triceps'],
+  'upper': ['chest', 'back-width', 'back-thickness', 'shoulders', 'traps', 'biceps', 'triceps'],
   'lower': ['quads', 'hamstrings', 'glutes', 'calves'],
-  'full body': ['chest', 'back', 'quads', 'hamstrings', 'shoulders', 'abs'],
-  'weak points': ['shoulders', 'calves', 'abs'],
+  'full body': ['chest', 'back-width', 'back-thickness', 'quads', 'hamstrings', 'shoulders', 'traps', 'abs'],
+  'weak points': ['shoulders', 'traps', 'calves', 'abs'],
   'conditioning': ['quads', 'hamstrings'],
 }
 
@@ -64,7 +69,7 @@ function parseSplitDay(splitDay: string): BodyPart[] {
   }
 
   if (parts.length === 0) {
-    return ['chest', 'back', 'shoulders']
+    return ['chest', 'back-width', 'back-thickness', 'shoulders', 'traps']
   }
 
   return parts
