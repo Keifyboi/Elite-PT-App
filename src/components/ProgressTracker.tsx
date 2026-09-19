@@ -5,6 +5,7 @@ import type { WeeklyCheckIn, Measurements, SubjectiveScores, UserProfile } from 
 import { getCheckIns, saveCheckIn, getProfile, saveProfile, getWorkouts, getMealPlans, getCurrentWeekNumber } from '@/lib/storage'
 import { calculateMacros, calculateLBM } from '@/lib/nutrition-engine'
 import { evaluatePhaseProgression, type PhaseRecommendation } from '@/lib/phase-progression'
+import { startNextBlockIfDue } from '@/lib/macrocycle'
 import { savePhoto, getPhotosForCheckIn, type StoredPhoto } from '@/lib/photo-storage'
 import PhotoCapture from './PhotoCapture'
 
@@ -859,7 +860,12 @@ export default function ProgressTracker() {
           {postSubmitRec.shouldSwitch && profile && (
             <button
               onClick={() => {
-                const updated = { ...profile, currentPhase: postSubmitRec.recommendedPhase }
+                const updated = {
+                  ...profile,
+                  currentPhase: postSubmitRec.recommendedPhase,
+                  ...(postSubmitRec.recommendedPhilosophy ? { trainingPhilosophy: postSubmitRec.recommendedPhilosophy } : {}),
+                }
+                if (postSubmitRec.recommendedPhilosophy) startNextBlockIfDue(updated)
                 saveProfile(updated)
                 setProfile(updated)
                 setPostSubmitRec(null)

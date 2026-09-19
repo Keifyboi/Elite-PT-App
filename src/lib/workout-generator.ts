@@ -1,8 +1,27 @@
-import type { WorkoutDay, WorkoutExercise, WorkoutSet, PhaseConfig, Intensifier, TrainingPhilosophy, BodyPart } from './types'
+import type { WorkoutDay, WorkoutExercise, WorkoutSet, PhaseConfig, Exercise, Intensifier, TrainingPhilosophy, BodybuildingPhilosophy, BodyPart } from './types'
 import { EXERCISE_DATABASE } from './data/exercises'
+import { BODYBUILDING_EXERCISES } from './data/bodybuilding-exercises'
 import { getCurrentPhase } from './philosophy-engine'
 import { getTemplateForSplit } from './data/workout-templates'
-import { getY3TWeek } from './block-wave'
+import { getY3TWeek, getGenericWaveWeek } from './block-wave'
+
+const BODYBUILDING_PHILOSOPHIES: readonly BodybuildingPhilosophy[] = ['y3t', 'mi40', 'fst7', 'phat', 'corey-g']
+
+function isBodybuildingPhilosophy(p: TrainingPhilosophy): p is BodybuildingPhilosophy {
+  return (BODYBUILDING_PHILOSOPHIES as readonly string[]).includes(p)
+}
+
+// ─── Universal pose-priority 5-day split → body parts ───
+// Bypasses parseSplitDay's keyword matching entirely: "back" as a substring
+// would otherwise collide with the generic 'back' keyword every other
+// philosophy still relies on, silently losing the width/thickness split.
+const BODYBUILDING_DAY_BODYPARTS: Record<string, BodyPart[]> = {
+  day1: ['chest', 'triceps'],
+  day2: ['quads', 'calves'],
+  day3: ['back-width', 'back-thickness', 'biceps'],
+  day4: ['hamstrings', 'glutes', 'calves'],
+  day5: ['shoulders', 'traps', 'biceps', 'triceps'],
+}
 
 // ─── Map split-day names to body parts ───
 
@@ -67,6 +86,24 @@ function seededShuffle<T>(arr: T[], seed: number): T[] {
 }
 
 
+// Curated pose-priority movements (back-width/back-thickness/traps/serratus/
+// hamstring-glute-tie-in/calves) shaped to slot into the same compound-vs-
+// isolation selection logic below: role 'primary' → 'compound' (picked
+// first, guaranteeing priority-area coverage since for the 3 brand-new body
+// parts — back-width, back-thickness, traps — this curated list is the ONLY
+// source; EXERCISE_DATABASE has zero entries for them).
+function curatedPoolForBodyPart(bp: BodyPart): Exercise[] {
+  return BODYBUILDING_EXERCISES.filter(e => e.bodyPart === bp).map(e => ({
+    id: e.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+    name: e.name,
+    bodyPart: e.bodyPart,
+    category: e.role === 'primary' ? 'compound' : 'isolation',
+    primaryMuscle: '',
+    secondaryMuscles: [],
+    executionCues: [],
+  }))
+}
+
 function selectExercises(
   bodyParts: BodyPart[],
   totalSets: [number, number],
@@ -79,7 +116,10 @@ function selectExercises(
   const avgSetsPerBP = Math.round(((totalSets[0] + totalSets[1]) / 2) / bodyParts.length)
 
   for (const bp of bodyParts) {
-    const pool = EXERCISE_DATABASE.filter(e => e.bodyPart === bp && !usedIds.has(e.id))
+    // Curated pose-priority movements first, generic database second — see
+    // curatedPoolForBodyPart for why this ordering matters.
+    const pool = [...curatedPoolForBodyPart(bp), ...EXERCISE_DATABASE.filter(e => e.bodyPart === bp)]
+      .filter(e => !usedIds.has(e.id))
     if (pool.length === 0) continue
 
     // Use seeded shuffle so each week rotates to a different exercise selection
@@ -192,7 +232,8 @@ export function generateWorkout(
   dayNumber: number,
   date?: string,
   weekNumber: number = 1,
-  isDeload?: boolean
+  isDeload?: boolean,
+  cycleNumber: number = 1
 ): WorkoutDay | null {
   const phase = getCurrentPhase(philosophy, phaseName)
   if (!phase) return null
@@ -210,13 +251,31 @@ export function generateWorkout(
     return null
   }
 
-  // Try structured template first (exact programming from extracted data)
+  // Try structured template first (exact programming from extracted data).
+  // Always null for the pose-priority philosophies (Y3T/MI40/FST-7/PHAT/
+  // Corey-G) — see the comment in getTemplateForSplit.
   const template = getTemplateForSplit(philosophy, phaseName, splitDay)
 
-  // ─── Y3T sub-week detection ───
+  // ─── Y3T sub-week (own 3-week rotation) / generic 4-week wave detection ───
   const isY3T = philosophy === 'y3t'
   const y3tWeek = isY3T ? getY3TWeek(weekNumber) : null
   const isY3TAnnihilation = y3tWeek?.isAnnihilation ?? false
+
+  const usesGenericWave = isBodybuildingPhilosophy(philosophy) && !isY3T
+  const waveWeek = usesGenericWave ? getGenericWaveWeek((((weekNumber - 1) % 4) + 1) as 1 | 2 | 3 | 4) : null
+  const isPhat = philosophy === 'phat'
+
+  // Wave week 4 (Deload) already means 60% volume — same as the existing
+  // isDeload truncation below, so it just sets that flag.
+  const effectiveIsDeload = isDeload || waveWeek?.stage === 'deload'
+
+  function parseWaveRepRange(): [number, number] | null {
+    if (!waveWeek) return null
+    // repRangeLabel is "X-Y / A-B" (compound / isolation) or a single "X-Y"
+    const firstRange = waveWeek.repRangeLabel.split('/')[0].trim()
+    const [lo, hi] = firstRange.split('-').map(Number)
+    return [lo, hi]
+  }
 
   let exercises: WorkoutExercise[]
 
@@ -247,8 +306,11 @@ export function generateWorkout(
       }
     })
   } else {
-    // Fallback: random selection from exercise database
-    const bodyParts = parseSplitDay(splitDay)
+    // Fallback: random selection from exercise database (always the path
+    // taken for Y3T/MI40/FST-7/PHAT/Corey-G — template is always null above).
+    const bodyParts = isBodybuildingPhilosophy(philosophy)
+      ? (BODYBUILDING_DAY_BODYPARTS[dayKey] ?? parseSplitDay(splitDay))
+      : parseSplitDay(splitDay)
     const exerciseSelections = selectExercises(bodyParts, style.setsPerBodyPart, phase, weekNumber)
 
     exercises = exerciseSelections.map((sel, idx) => {
@@ -256,45 +318,60 @@ export function generateWorkout(
         ? 'giant-set' as const
         : assignIntensifier(style.intensifierFrequency, idx, exerciseSelections.length, philosophy)
 
-      // Y3T overrides rep range entirely; otherwise use style with compound/isolation adjustment
+      const dbEx = EXERCISE_DATABASE.find(e => e.id === sel.exerciseId)
+        ?? BODYBUILDING_EXERCISES.find(e => e.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') === sel.exerciseId)
+      const isCompound = dbEx ? ('category' in dbEx ? dbEx.category === 'compound' : dbEx.role === 'primary') : false
+
+      // Y3T/generic-wave override rep range entirely; otherwise use style
+      // with compound/isolation adjustment.
       let adjustedReps: [number, number]
       if (y3tWeek) {
         adjustedReps = y3tWeek.repRange
+      } else if (waveWeek) {
+        adjustedReps = parseWaveRepRange() ?? (style.repRange as [number, number])
       } else {
         const repRange = style.repRange as [number, number]
-        const dbEx = EXERCISE_DATABASE.find(e => e.id === sel.exerciseId)
-        const isCompound = dbEx?.category === 'compound'
         adjustedReps = isCompound
           ? [repRange[0], Math.min(repRange[0] + 4, repRange[1])]
           : [Math.max(repRange[0], repRange[1] - 4), repRange[1]]
       }
 
-      const dbEx = EXERCISE_DATABASE.find(e => e.id === sel.exerciseId)
-      const isCompound = dbEx?.category === 'compound'
       const effectiveRest = y3tWeek
         ? y3tWeek.restSeconds
         : (isCompound ? style.restSeconds[1] : style.restSeconds[0])
 
-      // Annihilation: ~50% more sets
-      const numSets = isY3TAnnihilation ? Math.round(sel.sets * 1.5) : sel.sets
+      // Annihilation: ~50% more sets. Generic wave: scale by the week's
+      // volume multiplier (same idea, different curve).
+      const numSets = isY3TAnnihilation
+        ? Math.round(sel.sets * 1.5)
+        : waveWeek
+          ? Math.max(1, Math.round(sel.sets * waveWeek.volumeMultiplier))
+          : sel.sets
+
+      // PHAT/PH3 resolution: the day's first (primary compound) exercise is
+      // always 3-5 reps / RIR 1-2, regardless of wave week — everything
+      // after it follows the wave's hypertrophy rep range as normal.
+      const phatOverride = isPhat && idx === 0
+      const finalReps: [number, number] = phatOverride ? [3, 5] : adjustedReps
+      const phatNote = phatOverride ? 'PHAT power slot — RIR 1-2' : undefined
 
       return {
         id: crypto.randomUUID(),
         exerciseId: sel.exerciseId,
         name: sel.exerciseName,
         targetMuscle: sel.bodyPart,
-        sets: buildSets(numSets, adjustedReps),
+        sets: buildSets(numSets, finalReps),
         tempo: style.tempoDefault,
         restSeconds: effectiveRest,
         intensifier,
-        notes: intensifier ? intensifierNotes(intensifier) : '',
+        notes: phatNote ?? (intensifier ? intensifierNotes(intensifier) : ''),
         order: idx + 1,
       }
     })
   }
 
   // Apply deload modifications: reduce sets by 40%, strip intensifiers
-  if (isDeload) {
+  if (effectiveIsDeload) {
     exercises = exercises.map(ex => ({
       ...ex,
       sets: ex.sets.slice(0, Math.max(1, Math.floor(ex.sets.length * 0.6))).map((s, i) => ({ ...s, setNumber: i + 1 })),
@@ -303,11 +380,21 @@ export function generateWorkout(
     }))
   }
 
-  const workoutNotes = isDeload
+  const baseNotes = effectiveIsDeload
     ? 'DELOAD WEEK — reduced volume'
     : y3tWeek
     ? y3tWeek.note
+    : waveWeek
+    ? `${waveWeek.stage.toUpperCase()} WEEK — ${waveWeek.repRangeLabel} reps, RIR ${waveWeek.rir[0]}-${waveWeek.rir[1]}`
     : ''
+
+  // Cycle-to-cycle progression cue — reuses the app's existing per-exercise
+  // history/PB tracking rather than a new numeric prescription engine; the
+  // athlete checks their own logged numbers from Cycle 1 against this cue.
+  const cycleNote = isBodybuildingPhilosophy(philosophy) && cycleNumber > 1
+    ? `CYCLE ${cycleNumber} — beat your Cycle ${cycleNumber - 1} numbers on each lift.`
+    : ''
+  const workoutNotes = [cycleNote, baseNotes].filter(Boolean).join(' ')
 
   return {
     id: crypto.randomUUID(),

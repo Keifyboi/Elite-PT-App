@@ -1,6 +1,7 @@
-import type { UserProfile, WeeklyCheckIn, MacroTargets, TrainingPhilosophy } from './types'
+import type { UserProfile, WeeklyCheckIn, MacroTargets, TrainingPhilosophy, TrainingBlock } from './types'
 import { getPhases, getNextPhase, getCurrentPhase } from './philosophy-engine'
-import { getY3TWeek } from './block-wave'
+import { evaluateMacrocycleProgression, getActiveBlock } from './macrocycle'
+import { getTrainingBlockHistory } from './storage'
 
 // ─── Phase switch recommendation ───
 
@@ -8,6 +9,10 @@ export interface PhaseRecommendation {
   shouldSwitch: boolean
   currentPhase: string
   recommendedPhase: string
+  // Only set by the pose-priority macrocycle system (Y3T/MI40/FST-7/PHAT/
+  // Corey-G) — a block switch changes the philosophy itself, not just the
+  // phase name within it.
+  recommendedPhilosophy?: TrainingPhilosophy
   reasons: string[]
   adjustments: Adjustment[]
   urgency: 'info' | 'warning' | 'action'
@@ -236,32 +241,37 @@ function evaluateContestPrep(profile: UserProfile, checkIns: WeeklyCheckIn[]): P
   return base
 }
 
-// ─── Y3T: Fixed 3-week rotation ───
+// ─── Pose-priority macrocycle: Y3T / MI40 / FST-7 / PHAT / Corey-G ───
+// These 5 philosophies each collapse to a single PhaseConfig (see
+// philosophy-engine.ts) — there's no longer a "phase" to advance within one
+// philosophy. Instead, evaluateMacrocycleProgression (macrocycle.ts) decides
+// when the active TrainingBlock's cycles are complete and what runs next,
+// which may mean switching trainingPhilosophy itself (not just currentPhase).
+function evaluateMacrocycleBlock(profile: UserProfile): PhaseRecommendation {
+  const history = getTrainingBlockHistory()
+  const rec = evaluateMacrocycleProgression(profile, history)
+  const nextPhaseName = getPhases(rec.nextPhilosophy)[0]?.name ?? rec.nextPhilosophy
 
-function evaluateY3T(profile: UserProfile): PhaseRecommendation {
-  const weekInCycle = getY3TWeek(profile.weekNumber).weekInCycle
-  const phases = getPhases('y3t')
-  const currentIdx = phases.findIndex(p => p.name === profile.currentPhase)
-  const expectedIdx = weekInCycle - 1
-
-  if (currentIdx !== expectedIdx && phases[expectedIdx]) {
+  if (!rec.shouldSwitch) {
+    const { cycleNumber, weekInCycle } = getActiveBlock(profile, history)
     return {
-      shouldSwitch: true,
+      shouldSwitch: false,
       currentPhase: profile.currentPhase,
-      recommendedPhase: phases[expectedIdx].name,
-      reasons: [`Y3T auto-rotation: Week ${weekInCycle} of 3-week cycle`],
+      recommendedPhase: profile.currentPhase,
+      reasons: [`${rec.reason} — cycle ${cycleNumber}, week ${weekInCycle}`],
       adjustments: [],
-      urgency: 'action',
+      urgency: 'info',
     }
   }
 
   return {
-    shouldSwitch: false,
+    shouldSwitch: true,
     currentPhase: profile.currentPhase,
-    recommendedPhase: profile.currentPhase,
-    reasons: [`Y3T Week ${weekInCycle}/3 — on track`],
+    recommendedPhase: nextPhaseName,
+    recommendedPhilosophy: rec.nextPhilosophy,
+    reasons: [rec.reason],
     adjustments: [],
-    urgency: 'info',
+    urgency: 'action',
   }
 }
 
@@ -312,46 +322,7 @@ function evaluateBompa(profile: UserProfile): PhaseRecommendation {
   }
 }
 
-// ─── MI40: Phase progression through 7 phases ───
-
-function evaluateMI40(profile: UserProfile, checkIns: WeeklyCheckIn[]): PhaseRecommendation {
-  const current = getCurrentPhase('mi40', profile.currentPhase)
-  if (!current) {
-    return {
-      shouldSwitch: true,
-      currentPhase: profile.currentPhase,
-      recommendedPhase: 'Phase 1-2 (High Frequency)',
-      reasons: ['Starting MI40 program'],
-      adjustments: [],
-      urgency: 'action',
-    }
-  }
-
-  const weekInPhase = ((profile.weekNumber - 1) % Math.ceil(current.durationWeeks)) + 1
-
-  if (weekInPhase > current.durationWeeks) {
-    const next = getNextPhase('mi40', profile.currentPhase)
-    return {
-      shouldSwitch: true,
-      currentPhase: profile.currentPhase,
-      recommendedPhase: next?.name ?? 'Phase 1-2 (High Frequency)',
-      reasons: [`Completed ${current.name} — advancing to next MI40 phase`],
-      adjustments: [],
-      urgency: 'action',
-    }
-  }
-
-  return {
-    shouldSwitch: false,
-    currentPhase: profile.currentPhase,
-    recommendedPhase: profile.currentPhase,
-    reasons: [`${current.name} — Week ${weekInPhase}/${Math.ceil(current.durationWeeks)}`],
-    adjustments: [],
-    urgency: 'info',
-  }
-}
-
-// ─── Generic: duration-based for DTP, FST-7, HIT, PHAT, Corey G ───
+// ─── Generic: duration-based for DTP, HIT, Bompa-adjacent single-phase philosophies ───
 
 function evaluateGenericPhase(profile: UserProfile, philosophy: TrainingPhilosophy): PhaseRecommendation {
   const current = getCurrentPhase(philosophy, profile.currentPhase)
@@ -410,11 +381,13 @@ export function evaluatePhaseProgression(
     case 'contest-prep':
       return evaluateContestPrep(profile, sorted)
     case 'y3t':
-      return evaluateY3T(profile)
+    case 'mi40':
+    case 'fst7':
+    case 'phat':
+    case 'corey-g':
+      return evaluateMacrocycleBlock(profile)
     case 'bompa':
       return evaluateBompa(profile)
-    case 'mi40':
-      return evaluateMI40(profile, sorted)
     default:
       return evaluateGenericPhase(profile, profile.trainingPhilosophy)
   }

@@ -1,5 +1,21 @@
 import type { PhaseConfig, TrainingPhilosophy, TrainingStyle, CardioProtocol, SupplementItem } from './types'
 
+// ─── Pose-priority program builder: universal 5-day split ───
+// Shared by all 5 rewritten philosophies (Y3T/MI40/FST-7/PHAT/Corey-G).
+// Traps always get a dedicated slot on Day 5 rather than leftover shoulder
+// sets. Actual body-part resolution for each day happens in
+// workout-generator.ts (getBodybuildingSplitBodyParts), not by string-parsing
+// these labels, so the granular back-width/back-thickness/traps values never
+// collide with the generic 'back'/'shoulders' keyword matching other
+// philosophies still rely on.
+const BODYBUILDING_SPLIT: Record<string, string> = {
+  day1: 'Chest & Triceps',
+  day2: 'Legs — Quad Focus',
+  day3: 'Back & Biceps',
+  day4: 'Legs — Hamstring/Glute Focus',
+  day5: 'Shoulders, Traps & Arms',
+}
+
 // ─── Phase configurations for all 9 training philosophies ───
 
 export const PHILOSOPHY_PHASES: Record<TrainingPhilosophy, PhaseConfig[]> = {
@@ -100,92 +116,32 @@ export const PHILOSOPHY_PHASES: Record<TrainingPhilosophy, PhaseConfig[]> = {
   ],
 
   // ─── Ben Pakulski — MI40 ───
+  // One block-wide phase: week-to-week rep/volume progression comes from
+  // getGenericWaveWeek. MI40's identity (intra-set stretch + peak-contraction
+  // holds) is cued per-exercise via Exercise.mi40Intention, not via phase
+  // switching.
   'mi40': [
     {
-      name: 'Phase 1-2 (High Frequency)',
+      name: 'MI40 Block',
       philosophy: 'mi40',
-      durationWeeks: 2,
-      macroSplit: { protein: 40, carbs: 40, fats: 20 },
+      durationWeeks: 4, // 8 in Hypertrophy II (2 cycles) — see macrocycle.ts
+      macroSplit: { protein: 38, carbs: 42, fats: 20 },
       calorieStrategy: 'surplus',
-      calorieAdjustment: 300,
+      calorieAdjustment: 350,
       trainingStyle: {
         daysPerWeek: 5,
-        setsPerBodyPart: [8, 12],
-        repRange: [8, 12],
-        restSeconds: [40, 40],
+        setsPerBodyPart: [8, 14],
+        repRange: [8, 12], // overridden weekly by getGenericWaveWeek
+        restSeconds: [40, 90],
         tempoDefault: '4-0-1-0',
         intensifierFrequency: 'last-set',
-        splitType: 'mi40-40min',
-        split: { day1: 'Chest', day2: 'Back', day3: 'Shoulders & Arms', day4: 'Legs', day5: 'Weak Points' },
+        splitType: 'pose-priority',
+        split: BODYBUILDING_SPLIT,
       },
       cardioProtocol: { type: 'none', sessionsPerWeek: 0, durationMinutes: 0 },
       supplementProtocol: [
         { name: 'Glutamine', dose: '15-20g', timing: 'Post-workout' },
         { name: 'BCAAs', dose: '20g+', timing: 'Pre/Intra/Post' },
-      ],
-    },
-    {
-      name: 'Phase 3 (Power/Hypertrophy)',
-      philosophy: 'mi40',
-      durationWeeks: 1,
-      macroSplit: { protein: 35, carbs: 45, fats: 20 },
-      calorieStrategy: 'surplus',
-      calorieAdjustment: 400,
-      trainingStyle: {
-        daysPerWeek: 5,
-        setsPerBodyPart: [10, 14],
-        repRange: [6, 10],
-        restSeconds: [60, 90],
-        tempoDefault: '4-0-1-0',
-        intensifierFrequency: 'last-set',
-        splitType: 'mi40-power',
-        split: { day1: 'Chest & Triceps', day2: 'Back & Biceps', day3: 'Legs', day4: 'Shoulders', day5: 'Arms' },
-      },
-      cardioProtocol: { type: 'none', sessionsPerWeek: 0, durationMinutes: 0 },
-      supplementProtocol: [],
-    },
-    {
-      name: 'Phase 5 (De-Load)',
-      philosophy: 'mi40',
-      durationWeeks: 1,
-      macroSplit: { protein: 35, carbs: 45, fats: 20 },
-      calorieStrategy: 'maintenance',
-      calorieAdjustment: 0,
-      trainingStyle: {
-        daysPerWeek: 3,
-        setsPerBodyPart: [4, 6],
-        repRange: [10, 12],
-        restSeconds: [60, 90],
-        tempoDefault: '3-0-1-0',
-        intensifierFrequency: 'none',
-        splitType: 'deload',
-        split: { day1: 'Upper', day2: 'Lower', day3: 'Full Body' },
-      },
-      cardioProtocol: { type: 'liss', sessionsPerWeek: 2, durationMinutes: 20 },
-      supplementProtocol: [],
-    },
-    {
-      name: 'Phase 6 (Overreaching)',
-      philosophy: 'mi40',
-      durationWeeks: 1,
-      macroSplit: { protein: 40, carbs: 40, fats: 20 },
-      calorieStrategy: 'surplus',
-      calorieAdjustment: 500,
-      trainingStyle: {
-        daysPerWeek: 6,
-        setsPerBodyPart: [14, 20],
-        repRange: [8, 12],
-        restSeconds: [40, 60],
-        tempoDefault: '4-0-1-0',
-        intensifierFrequency: 'every-exercise',
-        splitType: 'mi40-overreach',
-        split: { day1: 'Chest', day2: 'Back', day3: 'Legs', day4: 'Shoulders', day5: 'Arms', day6: 'Weak Points' },
-      },
-      cardioProtocol: { type: 'none', sessionsPerWeek: 0, durationMinutes: 0 },
-      supplementProtocol: [
-        { name: 'Glutamine', dose: '20-30g', timing: 'Post + with meals' },
-        { name: 'Vitamin C', dose: '2g', timing: 'Post each workout' },
-        { name: 'Magnesium', dose: '+200-400mg extra', timing: 'PM' },
       ],
     },
   ],
@@ -217,63 +173,28 @@ export const PHILOSOPHY_PHASES: Record<TrainingPhilosophy, PhaseConfig[]> = {
   ],
 
   // ─── Neil Hill — Y3T ───
+  // One block-wide phase: week-to-week variation comes entirely from
+  // getY3TWeek's 3-week heavy/moderate/annihilation rotation (block-wave.ts),
+  // not from switching phase entries. Split is the universal pose-priority
+  // 5-day split (see BODYBUILDING_SPLIT below) — same for all 5 philosophies
+  // this rewrite covers.
   'y3t': [
     {
-      name: 'Week 1 (Heavy)',
+      name: 'Y3T Block',
       philosophy: 'y3t',
-      durationWeeks: 1,
-      macroSplit: { protein: 40, carbs: 30, fats: 30 },
+      durationWeeks: 3, // one full heavy/moderate/annihilation rotation
+      macroSplit: { protein: 40, carbs: 35, fats: 25 },
       calorieStrategy: 'surplus',
       calorieAdjustment: 300,
       trainingStyle: {
         daysPerWeek: 5,
         setsPerBodyPart: [9, 12],
-        repRange: [6, 10],
-        restSeconds: [120, 180],
+        repRange: [6, 15], // overridden weekly by getY3TWeek
+        restSeconds: [90, 180], // overridden weekly by getY3TWeek
         tempoDefault: '4-0-1-0',
-        intensifierFrequency: 'none',
-        splitType: 'bodypart',
-        split: { day1: 'Chest', day2: 'Back', day3: 'Shoulders', day4: 'Legs', day5: 'Arms' },
-      },
-      cardioProtocol: { type: 'liss', sessionsPerWeek: 2, durationMinutes: 20 },
-      supplementProtocol: [],
-    },
-    {
-      name: 'Week 2 (Hypertrophy)',
-      philosophy: 'y3t',
-      durationWeeks: 1,
-      macroSplit: { protein: 35, carbs: 40, fats: 25 },
-      calorieStrategy: 'surplus',
-      calorieAdjustment: 300,
-      trainingStyle: {
-        daysPerWeek: 5,
-        setsPerBodyPart: [9, 12],
-        repRange: [10, 14],
-        restSeconds: [60, 90],
-        tempoDefault: '4-0-1-0',
-        intensifierFrequency: 'none',
-        splitType: 'bodypart',
-        split: { day1: 'Chest', day2: 'Back', day3: 'Shoulders', day4: 'Legs', day5: 'Arms' },
-      },
-      cardioProtocol: { type: 'liss', sessionsPerWeek: 2, durationMinutes: 20 },
-      supplementProtocol: [],
-    },
-    {
-      name: 'Week 3 (Annihilation)',
-      philosophy: 'y3t',
-      durationWeeks: 1,
-      macroSplit: { protein: 30, carbs: 50, fats: 20 },
-      calorieStrategy: 'surplus',
-      calorieAdjustment: 400,
-      trainingStyle: {
-        daysPerWeek: 5,
-        setsPerBodyPart: [6, 10],
-        repRange: [20, 100],
-        restSeconds: [30, 60],
-        tempoDefault: '4-0-1-0',
-        intensifierFrequency: 'every-exercise',
-        splitType: 'bodypart',
-        split: { day1: 'Chest', day2: 'Back', day3: 'Shoulders', day4: 'Legs', day5: 'Arms' },
+        intensifierFrequency: 'none', // Y3T's own annihilation-week giant-set override applies instead
+        splitType: 'pose-priority',
+        split: BODYBUILDING_SPLIT,
       },
       cardioProtocol: { type: 'liss', sessionsPerWeek: 2, durationMinutes: 20 },
       supplementProtocol: [],
@@ -281,24 +202,25 @@ export const PHILOSOPHY_PHASES: Record<TrainingPhilosophy, PhaseConfig[]> = {
   ],
 
   // ─── Hany Rambod — FST-7 ───
+  // One block-wide phase: week-to-week rep/volume progression comes from
+  // getGenericWaveWeek (block-wave.ts), not from switching phase entries.
   'fst7': [
     {
       name: 'FST-7 Block',
       philosophy: 'fst7',
-      durationWeeks: 6,
+      durationWeeks: 4, // one generic wave cycle
       macroSplit: { protein: 35, carbs: 45, fats: 20 },
       calorieStrategy: 'surplus',
       calorieAdjustment: 400,
       trainingStyle: {
         daysPerWeek: 5,
         setsPerBodyPart: [10, 14],
-        repRange: [8, 12],
+        repRange: [8, 12], // overridden weekly by getGenericWaveWeek
         restSeconds: [30, 120],
         tempoDefault: '3-0-1-0',
-        intensifierFrequency: 'last-set',
-        splitType: 'bodypart-fst7',
-        split: { day1: 'Chest & Triceps', day2: 'Back & Biceps', day3: 'Legs', day4: 'Shoulders & Calves', day5: 'Arms' },
-        // Template keys match exactly
+        intensifierFrequency: 'last-set', // FST-7 finisher goes on the final 1-2 exercises only
+        splitType: 'pose-priority',
+        split: BODYBUILDING_SPLIT,
       },
       cardioProtocol: { type: 'liss', sessionsPerWeek: 3, durationMinutes: 25 },
       supplementProtocol: [
@@ -332,29 +254,28 @@ export const PHILOSOPHY_PHASES: Record<TrainingPhilosophy, PhaseConfig[]> = {
   ],
 
   // ─── Layne Norton — PHAT ───
+  // PHAT/PH3 resolution: the locked 5-day split has no room for separate
+  // power/hypertrophy days, so every session's primary compound is
+  // programmed PHAT-style (3-5 reps, RIR 1-2) regardless of the day, applied
+  // in generateWorkout — everything after it follows the generic wave's
+  // current-week hypertrophy rep range.
   'phat': [
     {
       name: 'PHAT Block',
       philosophy: 'phat',
-      durationWeeks: 8,
-      macroSplit: { protein: 30, carbs: 45, fats: 25 },
+      durationWeeks: 4, // 1-2 cycles per macrocycle.ts
+      macroSplit: { protein: 32, carbs: 43, fats: 25 },
       calorieStrategy: 'surplus',
       calorieAdjustment: 300,
       trainingStyle: {
         daysPerWeek: 5,
         setsPerBodyPart: [8, 14],
-        repRange: [3, 20],
+        repRange: [8, 12], // accessory work — overridden weekly by getGenericWaveWeek; primary compound is forced to [3,5]
         restSeconds: [60, 300],
         tempoDefault: '2-0-1-0',
         intensifierFrequency: 'none',
-        splitType: 'phat',
-        split: {
-          day1: 'Upper Body Power',
-          day2: 'Lower Body Power',
-          day3: 'Back & Shoulders Hypertrophy',
-          day4: 'Lower Body Hypertrophy',
-          day5: 'Chest & Arms Hypertrophy',
-        },
+        splitType: 'pose-priority',
+        split: BODYBUILDING_SPLIT,
       },
       cardioProtocol: { type: 'liss', sessionsPerWeek: 2, durationMinutes: 20 },
       supplementProtocol: [
@@ -450,33 +371,27 @@ export const PHILOSOPHY_PHASES: Record<TrainingPhilosophy, PhaseConfig[]> = {
   ],
 
   // ─── Corey Gregory — Squat Every Day ───
+  // One block-wide phase on the universal 5-day split, giant-set volume
+  // overload for lagging parts; week-to-week progression from the generic wave.
   'corey-g': [
     {
-      name: 'Squat Every Day + Get Swole',
+      name: 'Corey-G Block',
       philosophy: 'corey-g',
-      durationWeeks: 6,
+      durationWeeks: 4,
       macroSplit: { protein: 30, carbs: 40, fats: 30 },
       calorieStrategy: 'surplus',
       calorieAdjustment: 500,
       trainingStyle: {
-        daysPerWeek: 7,
-        setsPerBodyPart: [8, 12],
-        repRange: [1, 15],
-        restSeconds: [60, 120],
+        daysPerWeek: 5,
+        setsPerBodyPart: [10, 16],
+        repRange: [10, 15], // overridden weekly by getGenericWaveWeek
+        restSeconds: [30, 90],
         tempoDefault: '2-0-1-0',
-        intensifierFrequency: 'none',
-        splitType: 'daily-squat-plus',
-        split: {
-          day1: 'Squat + Chest & Back Giant Sets',
-          day2: 'Squat + Shoulders & Arms Giant Sets',
-          day3: 'Squat + Back & Biceps',
-          day4: 'Squat + Chest & Triceps',
-          day5: 'Squat + Full Upper Giant Sets',
-          day6: 'Squat + Conditioning',
-          day7: 'Squat + Lunges (Finisher)',
-        },
+        intensifierFrequency: 'every-exercise', // giant sets — high density, minimal rest
+        splitType: 'pose-priority',
+        split: BODYBUILDING_SPLIT,
       },
-      cardioProtocol: { type: 'liss', sessionsPerWeek: 7, durationMinutes: 0 },
+      cardioProtocol: { type: 'liss', sessionsPerWeek: 3, durationMinutes: 20 },
       supplementProtocol: [
         { name: 'Glucosamine', dose: 'Per label', timing: 'Daily' },
         { name: 'Fish Oil', dose: 'High dose', timing: 'Daily' },

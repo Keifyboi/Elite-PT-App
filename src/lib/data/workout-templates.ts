@@ -1056,6 +1056,18 @@ export function getTemplateForSplit(
   phase: string,
   splitDay: string
 ): WorkoutTemplate | null {
+  // The pose-priority rewrite (Y3T/MI40/FST-7/PHAT/Corey-G) runs a new
+  // universal 5-day split that these philosophies' hand-tuned templates
+  // below were never written for — their old lookup keys (old phase names,
+  // old split-day labels) no longer match anything real, so returning null
+  // here is deliberate: it sends these 5 straight to the exercise-database
+  // fallback in workout-generator.ts (which is pose-priority aware), rather
+  // than risking a stale template fuzzy-matching onto the new split by
+  // keyword coincidence (e.g. "Legs — Quad Focus" matching an old "Legs" key).
+  if (philosophy === 'y3t' || philosophy === 'mi40' || philosophy === 'fst7' || philosophy === 'phat' || philosophy === 'corey-g') {
+    return null
+  }
+
   const phaseL = phase.toLowerCase()
 
   let templates: Record<string, WorkoutTemplate>

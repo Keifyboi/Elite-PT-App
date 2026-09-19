@@ -6,6 +6,7 @@ import { getProfile, saveProfile, getTodayMealPlan, getTodayWorkout, getCheckIns
 import { useProfile } from '@/lib/ProfileContext'
 import { calculateMacros, calculateLBM } from '@/lib/nutrition-engine'
 import { evaluatePhaseProgression, type PhaseRecommendation } from '@/lib/phase-progression'
+import { startNextBlockIfDue } from '@/lib/macrocycle'
 import { prescribeHabits, calculateStreak, type HabitDefinition } from '@/lib/habits'
 import ProfileSetup from './ProfileSetup'
 import SwitchProgram from './SwitchProgram'
@@ -474,7 +475,12 @@ export default function Dashboard() {
                 <button
                   onClick={() => {
                     if (!profile) return
-                    const updated = { ...profile, currentPhase: phaseRec.recommendedPhase }
+                    const updated = {
+                      ...profile,
+                      currentPhase: phaseRec.recommendedPhase,
+                      ...(phaseRec.recommendedPhilosophy ? { trainingPhilosophy: phaseRec.recommendedPhilosophy } : {}),
+                    }
+                    if (phaseRec.recommendedPhilosophy) startNextBlockIfDue(updated)
                     saveProfile(updated)
                     setProfile(updated)
                     setMacros(calculateMacros(updated))

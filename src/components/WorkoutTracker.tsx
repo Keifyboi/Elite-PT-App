@@ -9,7 +9,20 @@ import { getLastSession, suggestOverload, getPersonalBest, getExerciseHistory, t
 import { getCurrentPhase } from '@/lib/philosophy-engine'
 import { evaluatePhaseProgression } from '@/lib/phase-progression'
 import { getCheckIns } from '@/lib/storage'
-import { getY3TWeek } from '@/lib/block-wave'
+import { getY3TWeek, getGenericWaveWeek } from '@/lib/block-wave'
+import { getActiveBlock } from '@/lib/macrocycle'
+import type { UserProfile } from '@/lib/types'
+
+const BODYBUILDING_PHILOSOPHIES = ['y3t', 'mi40', 'fst7', 'phat', 'corey-g']
+
+// The pose-priority philosophies key their weekly wave/rotation off weeks
+// since the active TrainingBlock started, not the flat program week number.
+function resolveGeneratorWeek(profile: UserProfile): number {
+  if (BODYBUILDING_PHILOSOPHIES.includes(profile.trainingPhilosophy)) {
+    return getActiveBlock(profile).weekInBlock
+  }
+  return getCurrentWeekNumber(profile)
+}
 
 // ─── Progression data helper ───
 
@@ -457,6 +470,43 @@ function Y3TBanner({ weekNumber }: { weekNumber: number }) {
   )
 }
 
+// ─── Block banner for MI40/FST-7/PHAT/Corey-G (generic 4-week wave) ───
+
+const MACROCYCLE_PHASE_LABELS: Record<string, string> = {
+  'hypertrophy-1': 'HYPERTROPHY I',
+  'hypertrophy-2': 'HYPERTROPHY II',
+  'recomposition': 'RECOMPOSITION',
+  'prep-and-peak': 'PREP & PEAK',
+}
+
+function BlockBanner({ profile }: { profile: UserProfile }) {
+  const { block, cycleNumber, weekInCycle } = getActiveBlock(profile)
+  if (!block) return null
+
+  const wave = getGenericWaveWeek((((weekInCycle - 1) % 4) + 1) as 1 | 2 | 3 | 4)
+  const isOverreach = wave.stage === 'overreach'
+
+  return (
+    <div style={{
+      borderTop: isOverreach ? '2px solid var(--accent)' : '1px solid var(--card-border)',
+      background: isOverreach ? 'rgba(201,168,76,0.07)' : 'var(--surface)',
+      padding: '8px 12px',
+      marginBottom: 4,
+    }}>
+      <p style={{
+        fontFamily: 'var(--font-heading), "Bebas Neue", impact, sans-serif',
+        fontSize: 14,
+        letterSpacing: '0.06em',
+        color: isOverreach ? 'var(--accent)' : 'var(--muted)',
+        lineHeight: 1.2,
+      }}>{MACROCYCLE_PHASE_LABELS[block.macrocyclePhase] ?? block.macrocyclePhase.toUpperCase()} — {wave.stage.toUpperCase()}</p>
+      <p style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>
+        Cycle {cycleNumber} of {block.cycleCount} · {wave.repRangeLabel} reps · RIR {wave.rir[0]}-{wave.rir[1]}
+      </p>
+    </div>
+  )
+}
+
 // ─── Execution quality prompt ───
 
 const EXECUTION_LABELS: Record<number, string> = {
@@ -577,7 +627,7 @@ export default function WorkoutTracker() {
       const isDeload =
         profile.trainingPhilosophy === 'bompa' &&
         phaseRec.adjustments.some(a => a.reason.toLowerCase().includes('deload'))
-      w = generateWorkout(profile.trainingPhilosophy, profile.currentPhase, dayNum, date, getCurrentWeekNumber(profile), isDeload) ?? undefined
+      w = generateWorkout(profile.trainingPhilosophy, profile.currentPhase, dayNum, date, resolveGeneratorWeek(profile), isDeload, getActiveBlock(profile).cycleNumber) ?? undefined
       if (w) saveWorkout(w)
     }
     if (w) {
@@ -612,7 +662,7 @@ export default function WorkoutTracker() {
     const splitKeys = Object.keys(phase.trainingStyle.split)
     const dayNum = splitKeys.findIndex(k => phase.trainingStyle.split[k] === workout.splitDay) + 1
     // Shuffle uses week+1 so it always picks a rotation different from the current one
-    const w = generateWorkout(profile.trainingPhilosophy, profile.currentPhase, dayNum || 1, workout.date, getCurrentWeekNumber(profile) + 1)
+    const w = generateWorkout(profile.trainingPhilosophy, profile.currentPhase, dayNum || 1, workout.date, resolveGeneratorWeek(profile) + 1, undefined, getActiveBlock(profile).cycleNumber)
     if (w) {
       saveWorkout(w)
       setWorkout(w)
@@ -654,9 +704,10 @@ export default function WorkoutTracker() {
   const totalSets = workout.exercises.reduce((sum, e) => sum + e.sets.length, 0)
   const completedSets = workout.exercises.reduce((sum, e) => sum + e.sets.filter(s => s.completed).length, 0)
 
-  // Y3T banner data
+  // Block banner data
   const sessionProfile = getProfile()
   const isY3TSession = workout.philosophy === 'y3t'
+  const isOtherBodybuildingSession = BODYBUILDING_PHILOSOPHIES.includes(workout.philosophy) && !isY3TSession
 
   return (
     <div className="px-4 pt-2 pb-4 space-y-3">
@@ -680,7 +731,10 @@ export default function WorkoutTracker() {
 
       {/* Y3T phase banner */}
       {isY3TSession && sessionProfile && (
-        <Y3TBanner weekNumber={sessionProfile.weekNumber} />
+        <Y3TBanner weekNumber={resolveGeneratorWeek(sessionProfile)} />
+      )}
+      {isOtherBodybuildingSession && sessionProfile && (
+        <BlockBanner profile={sessionProfile} />
       )}
 
       {workout.exercises.map(exercise => (
