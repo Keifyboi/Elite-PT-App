@@ -1,11 +1,11 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import type { WorkoutDay, WorkoutExercise, WorkoutSet } from '@/lib/types'
+import type { WorkoutDay, WorkoutExercise, WorkoutSet, BodyPart } from '@/lib/types'
 import { getProfile, saveWorkout, getWorkoutByDate, getWeekDates, getCurrentWeekNumber, getWorkouts } from '@/lib/storage'
 import { fetchCoachPrescribedWorkout } from '@/lib/supabase-storage'
 import HIITSession, { getHIITProtocol } from './HIITSession'
-import { generateWorkout } from '@/lib/workout-generator'
+import { generateWorkout, getAlternativeExercise } from '@/lib/workout-generator'
 import { getLastSession, suggestOverload, getPersonalBest, getExerciseHistory, type ExerciseRecord } from '@/lib/exercise-history'
 import { getCurrentPhase } from '@/lib/philosophy-engine'
 import { evaluatePhaseProgression } from '@/lib/phase-progression'
@@ -686,18 +686,29 @@ export default function WorkoutTracker() {
 
   const handleRegenerate = () => {
     if (!workout) return
-    const profile = getProfile()
-    if (!profile) return
-    const phase = getCurrentPhase(profile.trainingPhilosophy, profile.currentPhase)
-    if (!phase) return
-    const splitKeys = Object.keys(phase.trainingStyle.split)
-    const dayNum = splitKeys.findIndex(k => phase.trainingStyle.split[k] === workout.splitDay) + 1
-    // Shuffle uses week+1 so it always picks a rotation different from the current one
-    const w = generateWorkout(profile.trainingPhilosophy, profile.currentPhase, dayNum || 1, workout.date, resolveGeneratorWeek(profile) + 1, undefined, getActiveBlock(profile).cycleNumber)
-    if (w) {
-      saveWorkout(w)
-      setWorkout(w)
-    }
+    // Bumping the week number (the old approach) only produces different
+    // exercises for the algorithmically-generated philosophies — hand-authored
+    // programs (Incredible Bulk, DTP, HIT, Bompa, Contest-Prep) are fixed per
+    // split day and don't vary by week at all, so Shuffle silently did nothing
+    // for them. Swap each exercise for an equivalent targeting the same muscle
+    // instead — works the same way regardless of philosophy.
+    const usedNames = new Set(workout.exercises.map(e => e.name))
+    const exercises = workout.exercises.map(ex => {
+      const hasLogged = ex.sets.some(s => s.actualReps != null || s.weight != null)
+      if (hasLogged) return ex
+      const alt = getAlternativeExercise(ex.targetMuscle as BodyPart, Array.from(usedNames))
+      if (!alt) return ex
+      usedNames.delete(ex.name)
+      usedNames.add(alt.name)
+      return {
+        ...ex,
+        name: alt.name,
+        exerciseId: alt.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      }
+    })
+    const w: WorkoutDay = { ...workout, exercises }
+    saveWorkout(w)
+    setWorkout(w)
   }
 
   // ─── Week view ───

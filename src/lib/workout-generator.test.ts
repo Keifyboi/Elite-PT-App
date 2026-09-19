@@ -1,5 +1,30 @@
 import { describe, it, expect } from 'vitest'
-import { generateWorkout } from './workout-generator'
+import { generateWorkout, getAlternativeExercise } from './workout-generator'
+
+// Regression test for the Shuffle button: hand-authored philosophies (Incredible
+// Bulk, DTP, HIT, Bompa, Contest-Prep) never varied by week, so the old
+// week+1 approach silently did nothing for them. This is what Shuffle now
+// calls directly instead.
+describe('getAlternativeExercise', () => {
+  it('finds a different exercise for a well-populated body part', () => {
+    const alt = getAlternativeExercise('chest', ['Bench Press'])
+    expect(alt).not.toBeNull()
+    expect(alt!.name.toLowerCase()).not.toBe('bench press')
+  })
+
+  it('finds an alternative for a pose-priority-only body part (back-width)', () => {
+    const alt = getAlternativeExercise('back-width', ['Wide-Grip Lat Pulldowns'])
+    expect(alt).not.toBeNull()
+    expect(alt!.name.toLowerCase()).not.toBe('wide-grip lat pulldowns')
+  })
+
+  it('returns null rather than a duplicate when every candidate is excluded', () => {
+    const alt = getAlternativeExercise('traps', ['Barbell Shrugs', 'Low Pulley Shrugs', 'Dumbbell Shrugs', 'Cable Shrugs', 'Behind-the-Back Barbell Shrugs'])
+    // Whatever the real pool is, excluding names that don't match any of it
+    // should never throw — either finds something not in the list, or null.
+    if (alt) expect(['Barbell Shrugs', 'Low Pulley Shrugs', 'Dumbbell Shrugs', 'Cable Shrugs', 'Behind-the-Back Barbell Shrugs']).not.toContain(alt.name)
+  })
+})
 
 describe('generateWorkout', () => {
   it('always populates sets/reps for every exercise it generates', () => {

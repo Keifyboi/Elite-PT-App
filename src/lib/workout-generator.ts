@@ -109,6 +109,19 @@ function curatedPoolForBodyPart(bp: BodyPart): Exercise[] {
   }))
 }
 
+// Used by the Shuffle button to swap in a different exercise targeting the
+// same muscle group — same pool selectExercises() already draws from, so an
+// "alternative" is always something the app already trusts for that body
+// part. Returns null when nothing else targets that muscle (e.g. only one
+// exercise exists for it), in which case the caller should leave it as-is.
+export function getAlternativeExercise(targetMuscle: BodyPart, excludeNames: string[]): { name: string } | null {
+  const pool = [...curatedPoolForBodyPart(targetMuscle), ...EXERCISE_DATABASE.filter(e => e.bodyPart === targetMuscle)]
+  const exclude = new Set(excludeNames.map(n => n.toLowerCase()))
+  const candidates = pool.filter(e => !exclude.has(e.name.toLowerCase()))
+  if (candidates.length === 0) return null
+  return { name: candidates[Math.floor(Math.random() * candidates.length)].name }
+}
+
 function selectExercises(
   bodyParts: BodyPart[],
   totalSets: [number, number],
