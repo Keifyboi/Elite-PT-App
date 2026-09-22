@@ -1,20 +1,12 @@
 import type { PhaseConfig, TrainingPhilosophy, TrainingStyle, CardioProtocol, SupplementItem } from './types'
 
-// ─── Pose-priority program builder: universal 5-day split ───
-// Shared by all 5 rewritten philosophies (Y3T/MI40/FST-7/PHAT/Corey-G).
-// Traps always get a dedicated slot on Day 5 rather than leftover shoulder
-// sets. Actual body-part resolution for each day happens in
-// workout-generator.ts (getBodybuildingSplitBodyParts), not by string-parsing
-// these labels, so the granular back-width/back-thickness/traps values never
-// collide with the generic 'back'/'shoulders' keyword matching other
-// philosophies still rely on.
-const BODYBUILDING_SPLIT: Record<string, string> = {
-  day1: 'Chest & Triceps',
-  day2: 'Legs — Quad Focus',
-  day3: 'Back & Biceps',
-  day4: 'Legs — Hamstring/Glute Focus',
-  day5: 'Shoulders, Traps & Arms',
-}
+// Each of Y3T/MI40/FST-7/PHAT/Corey-G below runs its own real split, keyed
+// exactly to its hand-authored template set in workout-templates.ts (see
+// getTemplateForSplit) — restored from the pre-rewrite design after the
+// pose-priority rewrite had flattened all 5 onto one shared generic 5-day
+// split and left these templates unreachable. Muscle-group coverage rules
+// (dedicated trap work, back-width/thickness) still apply within each
+// template's exercise selection where relevant.
 
 // ─── Phase configurations for all 9 training philosophies ───
 
@@ -117,9 +109,12 @@ export const PHILOSOPHY_PHASES: Record<TrainingPhilosophy, PhaseConfig[]> = {
 
   // ─── Ben Pakulski — MI40 ───
   // One block-wide phase: week-to-week rep/volume progression comes from
-  // getGenericWaveWeek. MI40's identity (intra-set stretch + peak-contraction
-  // holds) is cued per-exercise via Exercise.mi40Intention, not via phase
-  // switching.
+  // getGenericWaveWeek, including its automatic week-4 deload — that's why
+  // the old Phase 5 (De-Load) / Phase 6 (Overreaching) phases are retired
+  // rather than restored alongside Phase 1-2: the wave overlay already
+  // reproduces that behaviour every cycle. MI40's real split and its
+  // hand-authored Phase 1-2 template (MI40_PHASE12_TEMPLATES) are served
+  // every day now — see getTemplateForSplit.
   'mi40': [
     {
       name: 'MI40 Block',
@@ -131,12 +126,12 @@ export const PHILOSOPHY_PHASES: Record<TrainingPhilosophy, PhaseConfig[]> = {
       trainingStyle: {
         daysPerWeek: 5,
         setsPerBodyPart: [8, 14],
-        repRange: [8, 12], // overridden weekly by getGenericWaveWeek
+        repRange: [8, 12], // baseline; MI40_PHASE12_TEMPLATES carries the real per-exercise reps
         restSeconds: [40, 90],
         tempoDefault: '4-0-1-0',
         intensifierFrequency: 'last-set',
-        splitType: 'pose-priority',
-        split: BODYBUILDING_SPLIT,
+        splitType: 'mi40-40min',
+        split: { day1: 'Chest', day2: 'Back', day3: 'Shoulders & Arms', day4: 'Legs', day5: 'Weak Points' },
       },
       cardioProtocol: { type: 'none', sessionsPerWeek: 0, durationMinutes: 0 },
       supplementProtocol: [
@@ -175,9 +170,9 @@ export const PHILOSOPHY_PHASES: Record<TrainingPhilosophy, PhaseConfig[]> = {
   // ─── Neil Hill — Y3T ───
   // One block-wide phase: week-to-week variation comes entirely from
   // getY3TWeek's 3-week heavy/moderate/annihilation rotation (block-wave.ts),
-  // not from switching phase entries. Split is the universal pose-priority
-  // 5-day split (see BODYBUILDING_SPLIT below) — same for all 5 philosophies
-  // this rewrite covers.
+  // not from switching phase entries. Split and per-week exercise content
+  // are Y3T's own — generateWorkout selects Y3T_WEEK1/2/3_TEMPLATES directly
+  // by getY3TWeek's subWeek (0/1/2), keyed exactly to this split's labels.
   'y3t': [
     {
       name: 'Y3T Block',
@@ -193,8 +188,8 @@ export const PHILOSOPHY_PHASES: Record<TrainingPhilosophy, PhaseConfig[]> = {
         restSeconds: [90, 180], // overridden weekly by getY3TWeek
         tempoDefault: '4-0-1-0',
         intensifierFrequency: 'none', // Y3T's own annihilation-week giant-set override applies instead
-        splitType: 'pose-priority',
-        split: BODYBUILDING_SPLIT,
+        splitType: 'bodypart',
+        split: { day1: 'Chest', day2: 'Back', day3: 'Shoulders', day4: 'Legs', day5: 'Arms' },
       },
       cardioProtocol: { type: 'liss', sessionsPerWeek: 2, durationMinutes: 20 },
       supplementProtocol: [],
@@ -204,6 +199,8 @@ export const PHILOSOPHY_PHASES: Record<TrainingPhilosophy, PhaseConfig[]> = {
   // ─── Hany Rambod — FST-7 ───
   // One block-wide phase: week-to-week rep/volume progression comes from
   // getGenericWaveWeek (block-wave.ts), not from switching phase entries.
+  // Split matches FST7_TEMPLATES' keys exactly, so the real 7-set-finisher
+  // programming is served every day — see getTemplateForSplit.
   'fst7': [
     {
       name: 'FST-7 Block',
@@ -215,12 +212,12 @@ export const PHILOSOPHY_PHASES: Record<TrainingPhilosophy, PhaseConfig[]> = {
       trainingStyle: {
         daysPerWeek: 5,
         setsPerBodyPart: [10, 14],
-        repRange: [8, 12], // overridden weekly by getGenericWaveWeek
+        repRange: [8, 12], // baseline; FST7_TEMPLATES carries the real per-exercise reps
         restSeconds: [30, 120],
         tempoDefault: '3-0-1-0',
         intensifierFrequency: 'last-set', // FST-7 finisher goes on the final 1-2 exercises only
-        splitType: 'pose-priority',
-        split: BODYBUILDING_SPLIT,
+        splitType: 'bodypart-fst7',
+        split: { day1: 'Chest & Triceps', day2: 'Back & Biceps', day3: 'Legs', day4: 'Shoulders & Calves', day5: 'Arms' },
       },
       cardioProtocol: { type: 'liss', sessionsPerWeek: 3, durationMinutes: 25 },
       supplementProtocol: [
@@ -254,11 +251,10 @@ export const PHILOSOPHY_PHASES: Record<TrainingPhilosophy, PhaseConfig[]> = {
   ],
 
   // ─── Layne Norton — PHAT ───
-  // PHAT/PH3 resolution: the locked 5-day split has no room for separate
-  // power/hypertrophy days, so every session's primary compound is
-  // programmed PHAT-style (3-5 reps, RIR 1-2) regardless of the day, applied
-  // in generateWorkout — everything after it follows the generic wave's
-  // current-week hypertrophy rep range.
+  // Real 5-day power/hypertrophy split, matching PHAT_TEMPLATES' keys
+  // exactly — the speed-work and power-slot rep ranges (3-5 reps on power
+  // days, true speed sets on hypertrophy days) are baked into the template
+  // itself, not force-applied to day 1 of a generic split as before.
   'phat': [
     {
       name: 'PHAT Block',
@@ -270,12 +266,18 @@ export const PHILOSOPHY_PHASES: Record<TrainingPhilosophy, PhaseConfig[]> = {
       trainingStyle: {
         daysPerWeek: 5,
         setsPerBodyPart: [8, 14],
-        repRange: [8, 12], // accessory work — overridden weekly by getGenericWaveWeek; primary compound is forced to [3,5]
+        repRange: [8, 12], // baseline; PHAT_TEMPLATES carries the real per-exercise reps
         restSeconds: [60, 300],
         tempoDefault: '2-0-1-0',
         intensifierFrequency: 'none',
-        splitType: 'pose-priority',
-        split: BODYBUILDING_SPLIT,
+        splitType: 'phat',
+        split: {
+          day1: 'Upper Body Power',
+          day2: 'Lower Body Power',
+          day3: 'Back & Shoulders Hypertrophy',
+          day4: 'Lower Body Hypertrophy',
+          day5: 'Chest & Arms Hypertrophy',
+        },
       },
       cardioProtocol: { type: 'liss', sessionsPerWeek: 2, durationMinutes: 20 },
       supplementProtocol: [
@@ -371,8 +373,8 @@ export const PHILOSOPHY_PHASES: Record<TrainingPhilosophy, PhaseConfig[]> = {
   ],
 
   // ─── Corey Gregory — Squat Every Day ───
-  // One block-wide phase on the universal 5-day split, giant-set volume
-  // overload for lagging parts; week-to-week progression from the generic wave.
+  // Real 7-day squat-every-session split, matching COREYG_TEMPLATES' keys
+  // exactly. Week-to-week volume still comes from the generic wave.
   'corey-g': [
     {
       name: 'Corey-G Block',
@@ -382,14 +384,22 @@ export const PHILOSOPHY_PHASES: Record<TrainingPhilosophy, PhaseConfig[]> = {
       calorieStrategy: 'surplus',
       calorieAdjustment: 500,
       trainingStyle: {
-        daysPerWeek: 5,
+        daysPerWeek: 7,
         setsPerBodyPart: [10, 16],
-        repRange: [10, 15], // overridden weekly by getGenericWaveWeek
+        repRange: [10, 15], // baseline; COREYG_TEMPLATES carries the real per-exercise reps
         restSeconds: [30, 90],
         tempoDefault: '2-0-1-0',
         intensifierFrequency: 'every-exercise', // giant sets — high density, minimal rest
-        splitType: 'pose-priority',
-        split: BODYBUILDING_SPLIT,
+        splitType: 'daily-squat-plus',
+        split: {
+          day1: 'Squat + Chest & Back Giant Sets',
+          day2: 'Squat + Shoulders & Arms Giant Sets',
+          day3: 'Squat + Back & Biceps',
+          day4: 'Squat + Chest & Triceps',
+          day5: 'Squat + Full Upper Giant Sets',
+          day6: 'Squat + Conditioning',
+          day7: 'Squat + Lunges (Finisher)',
+        },
       },
       cardioProtocol: { type: 'liss', sessionsPerWeek: 3, durationMinutes: 20 },
       supplementProtocol: [
