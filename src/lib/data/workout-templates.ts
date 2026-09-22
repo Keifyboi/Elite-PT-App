@@ -1061,15 +1061,19 @@ export function getTemplateForSplit(
   phase: string,
   splitDay: string
 ): WorkoutTemplate | null {
-  // The pose-priority rewrite (Y3T/MI40/FST-7/PHAT/Corey-G) runs a new
-  // universal 5-day split that these philosophies' hand-tuned templates
-  // below were never written for — their old lookup keys (old phase names,
-  // old split-day labels) no longer match anything real, so returning null
-  // here is deliberate: it sends these 5 straight to the exercise-database
-  // fallback in workout-generator.ts (which is pose-priority aware), rather
-  // than risking a stale template fuzzy-matching onto the new split by
-  // keyword coincidence (e.g. "Legs — Quad Focus" matching an old "Legs" key).
-  if (philosophy === 'y3t' || philosophy === 'mi40' || philosophy === 'fst7' || philosophy === 'phat' || philosophy === 'corey-g') {
+  // MI40/FST-7/PHAT/Corey-G each run their own real split now (see
+  // philosophy-engine.ts), keyed exactly to the hand-authored template sets
+  // below, so they fall through to the switch like every other philosophy.
+  //
+  // Y3T is the one exception: its split labels ('Chest'/'Back'/'Shoulders'/
+  // 'Legs'/'Arms') repeat identically across all 3 weeks of its rotation
+  // (Y3T_WEEK1/2/3_TEMPLATES), so phase/splitDay alone can't disambiguate
+  // which week's content to serve — that requires the actual week number.
+  // generateWorkout() selects the right week's template directly (via
+  // getY3TWeek's subWeek) and never calls this function for Y3T, so
+  // returning null here is just documentation of that split of
+  // responsibility, not a dead-end.
+  if (philosophy === 'y3t') {
     return null
   }
 
@@ -1098,12 +1102,8 @@ export function getTemplateForSplit(
     }
     case 'dtp':
       templates = DTP_TEMPLATES; break
-    case 'y3t': {
-      if (phaseL.includes('annihilation') || phaseL.includes('week 3')) templates = Y3T_WEEK3_TEMPLATES
-      else if (phaseL.includes('heavy') || phaseL.includes('week 1')) templates = Y3T_WEEK1_TEMPLATES
-      else templates = Y3T_WEEK2_TEMPLATES
-      break
-    }
+    // 'y3t' has no case here — the early return above sends Y3T straight to
+    // generateWorkout()'s own week-based template selection instead.
     case 'fst7':
       templates = FST7_TEMPLATES; break
     case 'hit':

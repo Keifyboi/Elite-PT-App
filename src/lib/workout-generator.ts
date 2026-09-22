@@ -2,7 +2,7 @@ import type { WorkoutDay, WorkoutExercise, WorkoutSet, PhaseConfig, Exercise, In
 import { EXERCISE_DATABASE } from './data/exercises'
 import { BODYBUILDING_EXERCISES } from './data/bodybuilding-exercises'
 import { getCurrentPhase } from './philosophy-engine'
-import { getTemplateForSplit } from './data/workout-templates'
+import { getTemplateForSplit, Y3T_WEEK1_TEMPLATES, Y3T_WEEK2_TEMPLATES, Y3T_WEEK3_TEMPLATES } from './data/workout-templates'
 import { getY3TWeek, getGenericWaveWeek } from './block-wave'
 
 const BODYBUILDING_PHILOSOPHIES: readonly BodybuildingPhilosophy[] = ['y3t', 'mi40', 'fst7', 'phat', 'corey-g']
@@ -269,15 +269,22 @@ export function generateWorkout(
     return null
   }
 
-  // Try structured template first (exact programming from extracted data).
-  // Always null for the pose-priority philosophies (Y3T/MI40/FST-7/PHAT/
-  // Corey-G) — see the comment in getTemplateForSplit.
-  const template = getTemplateForSplit(philosophy, phaseName, splitDay)
-
   // ─── Y3T sub-week (own 3-week rotation) / generic 4-week wave detection ───
   const isY3T = philosophy === 'y3t'
   const y3tWeek = isY3T ? getY3TWeek(weekNumber) : null
   const isY3TAnnihilation = y3tWeek?.isAnnihilation ?? false
+
+  // Try structured template first (exact programming from hand-authored
+  // data). MI40/FST-7/PHAT/Corey-G/every other philosophy resolve through
+  // getTemplateForSplit's exact-match-on-real-split-label lookup. Y3T is
+  // special-cased here instead: its 3 weeks (Heavy/Moderate/Annihilation)
+  // reuse the same 5 split-day labels, so which template set applies
+  // depends on the current week, not just philosophy/phase/splitDay —
+  // getTemplateForSplit can't disambiguate that, so it always returns null
+  // for Y3T and this is the real lookup.
+  const template = isY3T
+    ? ([Y3T_WEEK1_TEMPLATES, Y3T_WEEK2_TEMPLATES, Y3T_WEEK3_TEMPLATES][y3tWeek!.subWeek][splitDay] ?? null)
+    : getTemplateForSplit(philosophy, phaseName, splitDay)
 
   const usesGenericWave = isBodybuildingPhilosophy(philosophy) && !isY3T
   const waveWeek = usesGenericWave ? getGenericWaveWeek((((weekNumber - 1) % 4) + 1) as 1 | 2 | 3 | 4) : null
@@ -324,8 +331,10 @@ export function generateWorkout(
       }
     })
   } else {
-    // Fallback: random selection from exercise database (always the path
-    // taken for Y3T/MI40/FST-7/PHAT/Corey-G — template is always null above).
+    // Fallback: random selection from exercise database. Y3T/MI40/FST-7/
+    // PHAT/Corey-G now match a hand-authored template every real training
+    // day, so this only runs for non-bodybuilding philosophies or an
+    // unmatched split-day label (shouldn't happen with the splits above).
     const bodyParts = isBodybuildingPhilosophy(philosophy)
       ? (BODYBUILDING_DAY_BODYPARTS[dayKey] ?? parseSplitDay(splitDay))
       : parseSplitDay(splitDay)
