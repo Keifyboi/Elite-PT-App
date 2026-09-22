@@ -26,3 +26,10 @@ jobs:
       - run: npx tsc --noEmit
       - run: npm run test
       - run: npm run build
+        env:
+          # /coach prerenders at build time and needs a real Supabase client
+          # to do it — Vercel and local .env.local already have these; CI
+          # never did, which is why `npm run build` failed here specifically
+          # and nowhere else.
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
